@@ -105,7 +105,7 @@ export default function LoginMethodScreen() {
             accessibilityLabel={t("auth.loginMethod.withEmail")}
           >
             <View style={styles.buttonContent}>
-              <Ionicons name="mail-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
               <Text style={styles.emailButtonText}>{t("auth.loginMethod.withEmail")}</Text>
             </View>
           </Pressable>
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: "center",
-    marginBottom: spacing.xl,
+    marginBottom: spacing.xxl,
   },
   appIcon: {
     width: 180,
@@ -186,21 +186,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emailButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 52,
   },
   emailButtonPressed: {
-    backgroundColor: "#1D4ED8",
+    backgroundColor: colors.surfaceRaised,
   },
   emailButtonText: {
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "600",
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: "500",
   },
   buttonDisabled: {
     opacity: 0.5,

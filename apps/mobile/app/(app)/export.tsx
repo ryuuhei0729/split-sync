@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, Dimensions } from "react-native";
 import { useRouter } from "expo-router";
 import type * as SharingType from "expo-sharing";
 import { useTranslation } from "react-i18next";
@@ -52,6 +52,7 @@ export default function ExportScreen() {
     splitTimes,
     isFinished,
     finishTime,
+    raceDistance,
   } = useEditorStore();
 
   // --- Encoding state ---
@@ -239,6 +240,8 @@ export default function ExportScreen() {
         },
         showWatermark,
         summaryImageUri,
+        splitTimes,
+        raceDistance,
       );
       setOutputPath(path);
       setProgress(1);
@@ -267,6 +270,8 @@ export default function ExportScreen() {
     isPremium,
     videoWidth,
     videoHeight,
+    splitTimes,
+    raceDistance,
     t,
   ]);
 
@@ -332,7 +337,16 @@ export default function ExportScreen() {
                 backgroundColor: stopwatchConfig.backgroundColor,
                 fontFamily: stopwatchConfig.fontFamily,
               }}
-              scaleFactor={1}
+              // Reproduce the preview's visual proportions at native video resolution.
+              // The preview clamps cells to a readable minimum (e.g. 28px) at the
+              // device's screen width; to match, we scale that clamp threshold up by
+              // (videoWidth / screenWidth). The 0.5 factor is the clamp transition
+              // point (28/56), so the formula degrades gracefully on wider screens.
+              scaleFactor={
+                Math.max(0.5 * videoWidth / Dimensions.get("window").width, 1) *
+                stopwatchConfig.summaryScale
+              }
+              raceDistance={raceDistance}
             />
           </View>
         </View>
@@ -467,15 +481,15 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   // Off-screen hidden view for summary PNG capture.
-  // The outer container matches the video frame exactly (videoWidth × videoHeight).
-  // FinishSummaryTable is placed at position: "absolute", top: "55%", left: 0, right: 0
-  // with alignItems: "center" — identical to the StopwatchOverlay.summaryWrapper style.
-  // This guarantees WYSIWYG: the PNG pixel coordinates match the on-screen preview position.
+  // Sized to videoWidth × videoHeight so captureRef produces a 1:1 PNG that aligns
+  // pixel-perfect with the output frame. We push it off-screen via top/left rather
+  // than using opacity: 0 — react-native-view-shot captures a transparent (empty)
+  // bitmap when the source view's effective alpha is 0, which is why the summary
+  // was previously missing from exported videos.
   summaryCapture: {
     position: "absolute",
-    opacity: 0,
-    top: -9999,
-    left: -9999,
+    top: -100000,
+    left: -100000,
   },
   summaryCard: {
     backgroundColor: colors.surface,

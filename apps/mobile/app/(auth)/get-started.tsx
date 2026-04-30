@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, Linking, StyleSheet } from "react-native";
+import { View, Text, Pressable, Linking, StyleSheet, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -67,8 +67,14 @@ export default function GetStartedScreen() {
 
       <View style={styles.content}>
         <View style={styles.titleContainer}>
+          <Image source={require("../../assets/icon.png")} style={styles.appIcon} />
           <Text style={styles.title}>{t("auth.getStarted.title")}</Text>
           <Text style={styles.subtitle}>{t("auth.getStarted.subtitle")}</Text>
+        </View>
+
+        <View style={styles.crossAppNotice}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.primary} />
+          <Text style={styles.crossAppNoticeText}>{t("auth.getStarted.crossAppNotice")}</Text>
         </View>
 
         {displayError && (
@@ -111,7 +117,7 @@ export default function GetStartedScreen() {
             accessibilityLabel={t("auth.getStarted.withEmail")}
           >
             <View style={styles.buttonContent}>
-              <Ionicons name="mail-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
               <Text style={styles.emailButtonText}>{t("auth.getStarted.withEmail")}</Text>
             </View>
           </Pressable>
@@ -203,7 +209,11 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: "center",
-    marginBottom: spacing.xl,
+    marginBottom: spacing.xxl,
+  },
+  appIcon: {
+    width: 180,
+    height: 180,
   },
   title: {
     fontSize: 28,
@@ -214,6 +224,24 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     color: colors.muted,
+  },
+  crossAppNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.primaryMuted,
+    borderColor: colors.primaryBorder,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  crossAppNoticeText: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
   errorContainer: {
     backgroundColor: "#FEF2F2",
@@ -238,43 +266,39 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emailButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 52,
   },
   emailButtonPressed: {
-    backgroundColor: "#1D4ED8",
+    backgroundColor: colors.surfaceRaised,
   },
   emailButtonText: {
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "600",
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: "500",
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   guestButton: {
-    borderRadius: radius.lg,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.md,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 52,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
   },
   guestButtonPressed: {
-    backgroundColor: colors.surfaceRaised,
+    opacity: 0.6,
   },
   guestButtonText: {
     color: colors.muted,
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: fontSize.sm,
+    fontWeight: "500",
   },
   legalContainer: {
     paddingHorizontal: spacing.xl,

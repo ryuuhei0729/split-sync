@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { exportVideoWithStopwatch } from "@/lib/video/export-pipeline";
+import { renderFinishSummary } from "@/lib/stopwatch/renderer";
 import { useAuth } from "@/hooks/useAuth";
 import { canGuestUseToday, markGuestUsedToday } from "@/lib/guest-daily-limit";
 
@@ -13,6 +14,10 @@ export function useVideoExport(showWatermark = true) {
     stopwatchConfig,
     exportSettings,
     videoMetadata,
+    isFinished,
+    finishTime,
+    splitTimes,
+    raceDistance,
     setExportProgress,
     setIsExporting,
     isExporting,
@@ -59,6 +64,26 @@ export function useVideoExport(showWatermark = true) {
     setOutputBlob(null);
 
     try {
+      // Render finish summary PNG if applicable
+      let summaryBlob: Blob | null = null;
+      if (isFinished && finishTime !== null) {
+        const width = videoMetadata?.width ?? 1920;
+        const height = videoMetadata?.height ?? 1080;
+        const offscreen = document.createElement("canvas");
+        offscreen.width = width;
+        offscreen.height = height;
+        const ctx = offscreen.getContext("2d");
+        if (ctx) {
+          const contentRect = { x: 0, y: 0, width, height };
+          renderFinishSummary(ctx, stopwatchConfig, splitTimes, finishTime, raceDistance, contentRect);
+          summaryBlob = await new Promise<Blob | null>((resolve) =>
+            offscreen.toBlob(resolve, "image/png"),
+          );
+          offscreen.width = 0;
+          offscreen.height = 0;
+        }
+      }
+
       const blob = await exportVideoWithStopwatch(
         videoFile,
         startTime,
@@ -67,6 +92,8 @@ export function useVideoExport(showWatermark = true) {
         exportSettings,
         (percent) => setExportProgress(percent),
         showWatermark,
+        summaryBlob,
+        finishTime,
       );
       setOutputBlob(blob);
       await recordExportUsage();
@@ -81,6 +108,10 @@ export function useVideoExport(showWatermark = true) {
     stopwatchConfig,
     videoMetadata,
     exportSettings,
+    isFinished,
+    finishTime,
+    splitTimes,
+    raceDistance,
     setExportProgress,
     setIsExporting,
     showWatermark,

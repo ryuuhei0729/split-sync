@@ -1,6 +1,7 @@
-import type { StopwatchConfig, ExportSettings } from "@swimhub-timer/shared";
+import type { StopwatchConfig, ExportSettings, SplitTime } from "@swimhub-timer/shared";
 
 const SUMMARY_DELAY_SECONDS = 2;
+const SPLIT_DISPLAY_DURATION_SECONDS = 3;
 
 function getFFmpeg() {
   try {
@@ -104,6 +105,113 @@ function buildStopwatchFilters(
     `drawtext=enable='lt(${elapsedEnable}, 60)${timerCutoffGuard}':${baseParts.join(":")}:text='${textUnder60}'`,
     `drawtext=enable='gte(${elapsedEnable}, 60)${timerCutoffGuard}':${baseParts.join(":")}:text='${textOver60}'`,
   ];
+}
+
+/**
+ * Build drawtext filters for the active split — mirrors the web preview
+ * (apps/web/src/hooks/useCanvasCompositor.ts): each split appears for
+ * SPLIT_DISPLAY_DURATION_SECONDS once its time mark is reached, and is
+ * superseded by the next split if one lands inside that window.
+ *
+ * Format matches the web renderer: "<dist>m: <time>".
+ */
+function buildPassedSplitFilters(
+  startSignalTime: number,
+  config: StopwatchConfig,
+  finishTime: number | null,
+  splits: SplitTime[],
+  raceDistance: number | null,
+): string[] {
+  if (splits.length === 0) return [];
+
+  const visible = splits
+    .filter((s) => {
+      if (finishTime !== null && raceDistance !== null) {
+        if (s.distance === raceDistance && s.time === finishTime) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => a.time - b.time);
+
+  if (visible.length === 0) return [];
+
+  const splitFontSize = Math.max(8, Math.round(config.fontSize * 0.55));
+  const splitPad = Math.max(3, Math.round(config.padding * 0.6));
+  const splitGap = Math.max(2, Math.round(config.padding * 0.3));
+  const splitH = splitFontSize + 2 * splitPad;
+  const timerH = config.fontSize + 2 * config.padding;
+
+  // The split sits below the timer for top/center anchors and above the
+  // timer for bottom anchors — matches renderSplitDisplay() on the web.
+  let splitYExpr: string;
+  switch (config.anchor) {
+    case "top-left":
+    case "top-center":
+    case "top-right":
+      splitYExpr = `(h*${config.position.y}+${timerH + splitGap})`;
+      break;
+    case "center":
+      splitYExpr = `(h*${config.position.y}+${Math.round(timerH / 2) + splitGap})`;
+      break;
+    case "bottom-left":
+    case "bottom-center":
+    case "bottom-right":
+    default:
+      // Timer's top = (h*position.y) - timerH. Split sits ABOVE the timer.
+      splitYExpr = `(h*${config.position.y}-${timerH + splitGap + splitH})`;
+      break;
+  }
+
+  return visible.map((s, i) => {
+    const startT = (startSignalTime + s.time).toFixed(3);
+    const naturalEnd = startSignalTime + s.time + SPLIT_DISPLAY_DURATION_SECONDS;
+    const next = visible[i + 1];
+    // Truncate the window when the next split lands so the latest split wins,
+    // matching the web's "loop backwards and pick the most recent" behavior.
+    const supersededAt = next ? startSignalTime + next.time : Infinity;
+    const summaryAt = finishTime !== null
+      ? startSignalTime + finishTime + SUMMARY_DELAY_SECONDS
+      : Infinity;
+    const endT = Math.min(naturalEnd, supersededAt, summaryAt).toFixed(3);
+
+    const enable = `gte(t,${startT})*lt(t,${endT})`;
+
+    const xExpr = buildPositionX(config);
+
+    const distLabel = Number.isInteger(s.distance) ? String(s.distance) : s.distance.toString();
+    const text = `${distLabel}m\\: ${formatSecondsForDrawtext(s.time)}`;
+
+    const parts = [
+      `fontsize=${splitFontSize}`,
+      `fontcolor=${config.textColor}`,
+      `box=1`,
+      `boxcolor=${rgbaToFFmpegColor(config.backgroundColor)}`,
+      `boxborderw=${splitPad}`,
+      `x=${xExpr}`,
+      `y=${splitYExpr}`,
+      `text='${text}'`,
+    ];
+    return `drawtext=enable='${enable}':${parts.join(":")}`;
+  });
+}
+
+/**
+ * Format seconds for a static drawtext label (used for passed splits).
+ * Matches formatTime():
+ *  - < 60s:   SS.xx
+ *  - >= 60s:  M:SS.xx
+ * Note: the FFmpeg ':' separator inside text needs escaping with '\:'.
+ */
+function formatSecondsForDrawtext(seconds: number): string {
+  const totalCenti = Math.round(seconds * 100);
+  const totalSecs = Math.floor(totalCenti / 100);
+  const cs = totalCenti % 100;
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
+  const cs2 = String(cs).padStart(2, "0");
+  const s2 = String(s).padStart(2, "0");
+  if (m === 0) return `${s2}.${cs2}`;
+  return `${m}\\:${s2}.${cs2}`;
 }
 
 /** Resolve the app icon to a local file URI for FFmpeg overlay. */
@@ -262,6 +370,8 @@ export async function exportVideoWithStopwatch(
   onProgress: (percent: number) => void,
   showWatermark = true,
   summaryImageUri: string | null = null,
+  splitTimes: SplitTime[] = [],
+  raceDistance: number | null = null,
 ): Promise<string> {
   const { Paths, File } = require("expo-file-system") as typeof import("expo-file-system");
   const now = new Date();
@@ -303,6 +413,7 @@ export async function exportVideoWithStopwatch(
   // Pass plain draw filters (stopwatch + watermark) without a leading scale here.
   const drawFiltersForFC = [
     ...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime),
+    ...buildPassedSplitFilters(startSignalTime, scaledConfig, finishTime, splitTimes, raceDistance),
     ...(showWatermark ? [buildWatermarkFilter(watermarkHeight)] : []),
   ];
 
@@ -326,6 +437,7 @@ export async function exportVideoWithStopwatch(
     const scaleFilter = exportSettings.resolution !== "original" ? `scale=-2:${exportSettings.resolution},` : "";
     const vfFilters = [
       ...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime),
+      ...buildPassedSplitFilters(startSignalTime, scaledConfig, finishTime, splitTimes, raceDistance),
       ...(showWatermark ? [buildWatermarkFilter(watermarkHeight)] : []),
     ];
     const filterChain = `${scaleFilter}${vfFilters.join(",")}`;

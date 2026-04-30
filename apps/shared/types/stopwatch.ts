@@ -20,6 +20,7 @@ export interface StopwatchConfig {
   anchor: StopwatchAnchor;
   summaryPosition: { x: number; y: number };
   summaryAnchor: StopwatchAnchor;
+  summaryScale: number;
 }
 
 export interface StopwatchPreset {

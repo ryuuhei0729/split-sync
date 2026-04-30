@@ -10,6 +10,7 @@ const SHARED_LAYOUT = {
   anchor: "center",
   summaryPosition: { x: 0.5, y: 0.5 },
   summaryAnchor: "center",
+  summaryScale: 1,
 } as const;
 
 export const STOPWATCH_PRESETS: StopwatchPreset[] = [

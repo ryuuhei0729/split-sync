@@ -1,10 +1,10 @@
-import { View, Text, TextInput, StyleSheet, Pressable, FlatList, Keyboard } from "react-native";
+import { View, Text, TextInput, StyleSheet, Pressable, FlatList, Keyboard, ScrollView } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
 import { useEditorStore } from "../../stores/editor-store";
 import { useAuth } from "../../contexts/AuthProvider";
-import { formatTime, getMaxSplitCount } from "@swimhub-timer/shared";
+import { formatTime, getMaxSplitCount, COMMON_RACE_DISTANCES } from "@swimhub-timer/shared";
 import { colors, spacing, radius, fontSize } from "../../lib/theme";
 
 interface SplitsPanelProps {
@@ -26,8 +26,10 @@ export function SplitsPanel({ onFinish }: SplitsPanelProps) {
     currentVideoTime,
     currentDistanceInput,
     currentMemoInput,
+    raceDistance,
     setCurrentDistanceInput,
     setCurrentMemoInput,
+    setRaceDistance,
     recordSplit,
     finishRecording,
     removeSplit,
@@ -37,6 +39,15 @@ export function SplitsPanel({ onFinish }: SplitsPanelProps) {
 
   const elapsed = startTime !== null ? Math.max(0, currentVideoTime - startTime) : 0;
   const splitLimitReached = splitTimes.length >= maxSplits;
+  const canFinish = raceDistance !== null && raceDistance > 0;
+
+  // Per-row immediate lap = current splitTime − previous splitTime (sorted by distance).
+  const sortedByDistance = [...splitTimes].sort((a, b) => a.distance - b.distance);
+  const lapByDistance = new Map<number, number>();
+  for (let i = 0; i < sortedByDistance.length; i++) {
+    const prevTime = i === 0 ? 0 : sortedByDistance[i - 1].time;
+    lapByDistance.set(sortedByDistance[i].distance, sortedByDistance[i].time - prevTime);
+  }
 
   const handleRecord = () => {
     if (splitLimitReached) return;
@@ -46,6 +57,8 @@ export function SplitsPanel({ onFinish }: SplitsPanelProps) {
   };
 
   const handleFinish = () => {
+    if (!canFinish) return;
+    Keyboard.dismiss();
     finishRecording(elapsed, currentMemoInput);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onFinish?.();
@@ -63,6 +76,38 @@ export function SplitsPanel({ onFinish }: SplitsPanelProps) {
 
   return (
     <View style={styles.container}>
+      {/* Race distance picker — required before Finish */}
+      {startTime !== null && !isFinished && (
+        <View style={styles.raceDistanceCard}>
+          <Text style={styles.raceDistanceLabel}>{t("splits.raceDistanceLabel")}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.raceDistanceRow}
+          >
+            {COMMON_RACE_DISTANCES.map((d) => {
+              const active = raceDistance === d;
+              return (
+                <Pressable
+                  key={d}
+                  style={[styles.raceDistanceChip, active && styles.raceDistanceChipActive]}
+                  onPress={() => setRaceDistance(active ? null : d)}
+                >
+                  <Text
+                    style={[
+                      styles.raceDistanceChipText,
+                      active && styles.raceDistanceChipTextActive,
+                    ]}
+                  >
+                    {d}m
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Recording controls */}
       {startTime !== null && !isFinished && (
         <View style={styles.recordingCard}>
@@ -134,8 +179,16 @@ export function SplitsPanel({ onFinish }: SplitsPanelProps) {
           )}
 
           {/* Finish */}
-          <Pressable style={styles.finishBtn} onPress={handleFinish}>
-            <Text style={styles.finishBtnText}>{t("splits.finish")}</Text>
+          <Pressable
+            style={[styles.finishBtn, !canFinish && styles.btnDisabled]}
+            onPress={handleFinish}
+            disabled={!canFinish}
+          >
+            <Text style={styles.finishBtnText}>
+              {canFinish
+                ? t("splits.finishAtDistance", { distance: raceDistance })
+                : t("splits.finishNeedRaceDistance")}
+            </Text>
           </Pressable>
         </View>
       )}
@@ -174,11 +227,14 @@ export function SplitsPanel({ onFinish }: SplitsPanelProps) {
                 <Text style={styles.distanceBadgeText}>{item.distance}m</Text>
               </View>
               <Text style={styles.splitTime}>{formatTime(item.time)}</Text>
-              {item.lapTime !== null && (
-                <Text style={styles.lapTime}>
-                  {t("splits.lap")}: {formatTime(item.lapTime)}
-                </Text>
-              )}
+              {(() => {
+                const lap = lapByDistance.get(item.distance);
+                return lap !== undefined && lap > 0 ? (
+                  <Text style={styles.lapTime}>
+                    {t("splits.lap")}: {formatTime(lap)}
+                  </Text>
+                ) : null;
+              })()}
               {item.memo ? (
                 <Text style={styles.splitMemo} numberOfLines={1}>{item.memo}</Text>
               ) : null}
@@ -199,6 +255,48 @@ const styles = StyleSheet.create({
   container: {
     gap: spacing.lg,
     padding: spacing.lg,
+  },
+  raceDistanceCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  raceDistanceLabel: {
+    fontSize: fontSize.xs,
+    color: colors.muted,
+    fontWeight: "600",
+  },
+  raceDistanceRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
+    paddingVertical: 2,
+  },
+  raceDistanceChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  raceDistanceChipActive: {
+    backgroundColor: colors.primaryMuted,
+    borderColor: colors.primaryBorder,
+  },
+  raceDistanceChipText: {
+    fontSize: fontSize.sm,
+    fontFamily: "monospace",
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  raceDistanceChipTextActive: {
+    color: colors.primary,
   },
   recordingCard: {
     backgroundColor: colors.surface,

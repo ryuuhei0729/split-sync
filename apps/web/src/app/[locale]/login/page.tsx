@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
@@ -8,6 +8,10 @@ import type { TFunction } from "i18next";
 import { useAuth } from "@/hooks/useAuth";
 import { SwimHubTimerIcon } from "@/components/icons/SwimHubTimerIcon";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import {
+  validatePassword,
+  type PasswordChecks,
+} from "@/lib/passwordValidator";
 
 const PASSWORD_MIN_LENGTH = 6;
 
@@ -108,9 +112,12 @@ export default function LoginPage() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmationSent, setConfirmationSent] = useState(false);
+
+  const passwordValidation = useMemo(() => validatePassword(password), [password]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -142,7 +149,33 @@ export default function LoginPage() {
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < PASSWORD_MIN_LENGTH) {
+    if (isSignUp) {
+      if (!name.trim()) {
+        setError(t("auth.errors.nameRequired"));
+        return;
+      }
+      const checks = passwordValidation.checks;
+      if (!checks.minLength) {
+        setError(t("auth.errors.passwordTooShort", { minLength: PASSWORD_MIN_LENGTH }));
+        return;
+      }
+      if (!checks.lowercase) {
+        setError(t("auth.errors.passwordMissingLowercase"));
+        return;
+      }
+      if (!checks.uppercase) {
+        setError(t("auth.errors.passwordMissingUppercase"));
+        return;
+      }
+      if (!checks.digit) {
+        setError(t("auth.errors.passwordMissingDigit"));
+        return;
+      }
+      if (!checks.symbol) {
+        setError(t("auth.errors.passwordMissingSymbol"));
+        return;
+      }
+    } else if (password.length < PASSWORD_MIN_LENGTH) {
       setError(t("auth.errors.passwordTooShort", { minLength: PASSWORD_MIN_LENGTH }));
       return;
     }
@@ -151,7 +184,7 @@ export default function LoginPage() {
       setError(null);
       setConfirmationSent(false);
       if (isSignUp) {
-        const success = await signUpWithEmail(email, password);
+        const success = await signUpWithEmail(email, password, name.trim());
         if (success) {
           setConfirmationSent(true);
         }
@@ -272,6 +305,18 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleEmailSubmit} className="space-y-3">
+          {isSignUp && (
+            <input
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("auth.namePlaceholder")}
+              required
+              disabled={submitting}
+              className="w-full py-3 px-4 border border-border rounded-lg text-sm bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+            />
+          )}
           <input
             type="email"
             autoComplete="username"
@@ -284,7 +329,7 @@ export default function LoginPage() {
           />
           <input
             type="password"
-            autoComplete="current-password"
+            autoComplete={isSignUp ? "new-password" : "current-password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder={t("auth.passwordPlaceholder")}
@@ -292,6 +337,7 @@ export default function LoginPage() {
             disabled={submitting}
             className="w-full py-3 px-4 border border-border rounded-lg text-sm bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
           />
+          {isSignUp && <PasswordRequirementsList checks={passwordValidation.checks} t={t} />}
           <button
             type="submit"
             disabled={submitting}
@@ -363,6 +409,45 @@ export default function LoginPage() {
           })()}
         </p>
       </div>
+    </div>
+  );
+}
+
+function PasswordRequirementsList({
+  checks,
+  t,
+}: {
+  checks: PasswordChecks;
+  t: TFunction;
+}) {
+  const items: { key: keyof PasswordChecks; label: string }[] = [
+    { key: "minLength", label: t("auth.passwordRequirements.minLength") },
+    { key: "lowercase", label: t("auth.passwordRequirements.lowercase") },
+    { key: "uppercase", label: t("auth.passwordRequirements.uppercase") },
+    { key: "digit", label: t("auth.passwordRequirements.digit") },
+    { key: "symbol", label: t("auth.passwordRequirements.symbol") },
+  ];
+  return (
+    <div className="space-y-1 rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        {t("auth.passwordRequirements.title")}
+      </p>
+      <ul className="space-y-1">
+        {items.map(({ key, label }) => {
+          const met = checks[key];
+          return (
+            <li
+              key={key}
+              className={`flex items-center gap-2 text-xs ${
+                met ? "text-emerald-600" : "text-muted-foreground"
+              }`}
+            >
+              <span aria-hidden="true">{met ? "✓" : "○"}</span>
+              <span>{label}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

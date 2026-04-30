@@ -33,6 +33,7 @@ const ja = {
 
   import: {
     subtitle: "レース動画にストップウォッチオーバーレイを追加",
+    heroMessage: "レース動画を取り込むだけで、ストップウォッチを自動オーバーレイします",
     selectVideo: "動画を選択",
     selectVideoDesc: "フォトライブラリから水泳レースの動画を選んでください",
     dropHere: "レース動画をドロップ",
@@ -47,6 +48,9 @@ const ja = {
     stepDetectDesc: "スタート信号を検出",
     stepExport: "書き出し",
     stepExportDesc: "結果をダウンロード",
+    step1Short: "動画選択",
+    step2Short: "自動検出",
+    step3Short: "書き出し",
   },
 
   signal: {
@@ -86,9 +90,13 @@ const ja = {
     title: "スプリット",
     record: "Record",
     finish: "Finish",
+    finishAtDistance: "Finish ({{distance}}m)",
+    finishNeedRaceDistance: "種目距離を選択してください",
+    raceDistanceLabel: "種目距離",
     edit: "編集する",
     finalTime: "Final Time",
     distancePlaceholder: "距離 (m)",
+    distanceHeader: "距離",
     memoPlaceholder: "メモ（任意）",
     emptyHint: "動画を一時停止し、距離を入力して\nRecordボタンでスプリットを記録",
     lap: "lap",
@@ -97,8 +105,8 @@ const ja = {
     upgradeToPremium: "Premiumプランで無制限に記録できます →",
     loginToRecordMore: "ログインして無制限に記録 →",
     overlay: {
-      splitTime: "SPLIT TIME",
-      lapHeader: "25M LAP",
+      splitTime: "SPLIT",
+      lapHeader: "LAP",
     },
   },
 
@@ -145,6 +153,8 @@ const ja = {
     tabDesign: "デザイン",
     tabSplits: "スプリット",
     confirmDesign: "このデザインで確定",
+    gateSignalRequired: "先にスタートを検出してください",
+    gateDesignRequired: "先にデザインを確定してください",
   },
 
   auth: {
@@ -159,16 +169,17 @@ const ja = {
     getStarted: {
       title: "アカウント作成",
       subtitle: "SwimHub Timerを始めましょう",
-      withApple: "Appleで登録",
-      withGoogle: "Googleで登録",
-      withEmail: "メールアドレスで登録",
+      withApple: "Appleで作成",
+      withGoogle: "Googleで作成",
+      withEmail: "Emailで作成",
+      crossAppNotice: "1つのアカウントで、SwimHub・Scanner・Timer すべてのアプリをご利用いただけます",
     },
     loginMethod: {
       title: "ログイン",
       subtitle: "SwimHub Timerへようこそ",
       withApple: "Appleでログイン",
       withGoogle: "Googleでログイン",
-      withEmail: "メールアドレスでログイン",
+      withEmail: "Emailでログイン",
       noAccount: "アカウントをお持ちでない方は",
       signup: "新規登録",
     },
@@ -192,7 +203,7 @@ const ja = {
     planFree: "Free",
     planPremium: "Premium",
     premiumOnly: "Premiumプランのみ",
-    continueAsGuest: "ゲストとして続ける",
+    continueAsGuest: "ログインせずに試す",
     guestMode: "ゲスト利用中",
     guestLimitHint:
       "ゲスト利用の場合は1日のエクスポート回数は1回まで（日本時間の0時にリセット）",
@@ -207,7 +218,22 @@ const ja = {
     deleteAccountStep2:
       "SwimHub で蓄積したタイム、動画、画像等のデータも全て削除されます。本当に削除しますか？",
     deleteAccountWarning: "すべてのデータが完全に削除されます",
+    namePlaceholder: "山田太郎",
+    nameLabel: "名前",
+    passwordRequirements: {
+      title: "パスワード要件",
+      minLength: "6文字以上",
+      lowercase: "小文字を含む",
+      uppercase: "大文字を含む",
+      digit: "数字を含む",
+      symbol: "記号を含む",
+    },
     errors: {
+      nameRequired: "名前を入力してください",
+      passwordMissingLowercase: "パスワードに小文字を含めてください",
+      passwordMissingUppercase: "パスワードに大文字を含めてください",
+      passwordMissingDigit: "パスワードに数字を含めてください",
+      passwordMissingSymbol: "パスワードに記号を含めてください",
       cancelled: "認証がキャンセルされました",
       generic: "認証に失敗しました。もう一度お試しください。",
       appleLoginFailed: "Appleログインに失敗しました。もう一度お試しください。",

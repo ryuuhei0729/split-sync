@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useEmailAuth } from "../../hooks/useEmailAuth";
 import { colors, spacing, radius, fontSize } from "../../lib/theme";
+import { validatePassword, type PasswordChecks } from "../../utils/validatePassword";
 
 const PASSWORD_MIN_LENGTH = 6;
 
@@ -25,11 +26,13 @@ export default function EmailSignupScreen() {
   const { t } = useTranslation();
   const { signUpWithEmail, loading, error: authError, clearError } = useEmailAuth();
 
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [confirmationSent, setConfirmationSent] = useState(false);
 
+  const passwordValidation = useMemo(() => validatePassword(password), [password]);
   const error = localError || authError;
 
   const handleSubmit = async () => {
@@ -37,16 +40,37 @@ export default function EmailSignupScreen() {
     clearError();
     setConfirmationSent(false);
 
+    if (!name.trim()) {
+      setLocalError(t("auth.errors.nameRequired"));
+      return;
+    }
     if (!email.trim()) {
       setLocalError(t("auth.emailPlaceholder"));
       return;
     }
-    if (password.length < PASSWORD_MIN_LENGTH) {
+    const checks = passwordValidation.checks;
+    if (!checks.minLength) {
       setLocalError(t("auth.errors.passwordTooShort", { minLength: PASSWORD_MIN_LENGTH }));
       return;
     }
+    if (!checks.lowercase) {
+      setLocalError(t("auth.errors.passwordMissingLowercase"));
+      return;
+    }
+    if (!checks.uppercase) {
+      setLocalError(t("auth.errors.passwordMissingUppercase"));
+      return;
+    }
+    if (!checks.digit) {
+      setLocalError(t("auth.errors.passwordMissingDigit"));
+      return;
+    }
+    if (!checks.symbol) {
+      setLocalError(t("auth.errors.passwordMissingSymbol"));
+      return;
+    }
 
-    const success = await signUpWithEmail(email, password);
+    const success = await signUpWithEmail(email, password, name.trim());
     if (success) {
       setConfirmationSent(true);
     }
@@ -90,6 +114,21 @@ export default function EmailSignupScreen() {
 
             <View style={styles.form}>
               <View style={styles.inputGroup}>
+                <Text style={styles.label}>{t("auth.nameLabel")}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={t("auth.namePlaceholder")}
+                  placeholderTextColor="#9CA3AF"
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                  textContentType="name"
+                  editable={!loading}
+                  accessibilityLabel={t("auth.nameLabel")}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
                 <Text style={styles.label}>{t("auth.email")}</Text>
                 <TextInput
                   style={styles.input}
@@ -121,6 +160,7 @@ export default function EmailSignupScreen() {
                   editable={!loading}
                   accessibilityLabel={t("auth.passwordPlaceholder")}
                 />
+                <PasswordRequirementsList checks={passwordValidation.checks} />
               </View>
 
               <Pressable
@@ -130,7 +170,7 @@ export default function EmailSignupScreen() {
                   pressed && !loading && styles.submitButtonPressed,
                 ]}
                 onPress={handleSubmit}
-                disabled={loading || !email || !password}
+                disabled={loading || !name || !email || !password}
                 accessibilityRole="button"
                 accessibilityLabel={t("auth.signUp")}
                 accessibilityState={{ busy: loading }}
@@ -182,6 +222,35 @@ export default function EmailSignupScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function PasswordRequirementsList({ checks }: { checks: PasswordChecks }) {
+  const { t } = useTranslation();
+  const items: { key: keyof PasswordChecks; label: string }[] = [
+    { key: "minLength", label: t("auth.passwordRequirements.minLength") },
+    { key: "lowercase", label: t("auth.passwordRequirements.lowercase") },
+    { key: "uppercase", label: t("auth.passwordRequirements.uppercase") },
+    { key: "digit", label: t("auth.passwordRequirements.digit") },
+    { key: "symbol", label: t("auth.passwordRequirements.symbol") },
+  ];
+  return (
+    <View style={styles.requirements}>
+      <Text style={styles.requirementsTitle}>{t("auth.passwordRequirements.title")}</Text>
+      {items.map(({ key, label }) => {
+        const met = checks[key];
+        return (
+          <View key={key} style={styles.requirementRow}>
+            <Ionicons
+              name={met ? "checkmark-circle" : "ellipse-outline"}
+              size={14}
+              color={met ? "#10B981" : "#9CA3AF"}
+            />
+            <Text style={[styles.requirementText, met && styles.requirementTextMet]}>{label}</Text>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -309,5 +378,27 @@ const styles = StyleSheet.create({
   legalLink: {
     color: colors.primary,
     fontWeight: "500",
+  },
+  requirements: {
+    marginTop: spacing.xs,
+    gap: 4,
+  },
+  requirementsTitle: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  requirementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  requirementText: {
+    fontSize: fontSize.xs,
+    color: "#9CA3AF",
+  },
+  requirementTextMet: {
+    color: "#10B981",
   },
 });

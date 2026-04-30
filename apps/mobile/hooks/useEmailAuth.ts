@@ -31,7 +31,7 @@ export function useEmailAuth() {
   );
 
   const signUpWithEmail = useCallback(
-    async (email: string, password: string): Promise<boolean> => {
+    async (email: string, password: string, name: string): Promise<boolean> => {
       if (!supabase) {
         setError(t("auth.errors.notInitialized"));
         return false;
@@ -42,6 +42,9 @@ export function useEmailAuth() {
         const { error: authError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: { name },
+          },
         });
         if (authError) {
           setError(localizeAuthError(authError.message, t));

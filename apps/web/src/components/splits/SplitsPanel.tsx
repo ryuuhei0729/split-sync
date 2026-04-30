@@ -2,7 +2,7 @@
 
 import { useEditorStore } from "@/stores/editor-store";
 import { useAuth } from "@/hooks/useAuth";
-import { formatTime, getMaxSplitCount } from "@swimhub-timer/shared";
+import { formatTime, getMaxSplitCount, COMMON_RACE_DISTANCES } from "@swimhub-timer/shared";
 import { useTranslation } from "react-i18next";
 import {
   ListOrdered,
@@ -14,6 +14,7 @@ import {
   Minus,
   Plus,
   Lock,
+  Pencil,
 } from "lucide-react";
 
 export function SplitsPanel() {
@@ -29,17 +30,21 @@ export function SplitsPanel() {
     currentVideoTime,
     currentDistanceInput,
     currentMemoInput,
+    raceDistance,
     setCurrentDistanceInput,
     setCurrentMemoInput,
+    setRaceDistance,
     recordSplit,
     finishRecording,
     removeSplit,
+    revertFinish,
     resetSplits,
     seekVideo,
   } = useEditorStore();
 
   const elapsed = startTime !== null ? Math.max(0, currentVideoTime - startTime) : 0;
   const splitLimitReached = splitTimes.length >= maxSplits;
+  const canFinish = raceDistance !== null && raceDistance > 0;
 
   const handleRecord = () => {
     if (splitLimitReached) return;
@@ -47,6 +52,7 @@ export function SplitsPanel() {
   };
 
   const handleFinish = () => {
+    if (!canFinish) return;
     finishRecording(elapsed, currentMemoInput);
   };
 
@@ -79,6 +85,33 @@ export function SplitsPanel() {
           </button>
         )}
       </div>
+
+      {/* Race distance chips */}
+      {startTime !== null && !isFinished && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            {t("splits.raceDistanceLabel")}
+          </p>
+          <div className="overflow-x-auto flex gap-2 pb-2">
+            {COMMON_RACE_DISTANCES.map((d) => {
+              const active = raceDistance === d;
+              return (
+                <button
+                  key={d}
+                  onClick={() => setRaceDistance(d === raceDistance ? null : d)}
+                  className={`shrink-0 px-3 py-1 text-xs font-semibold font-mono rounded-lg border transition-colors ${
+                    active
+                      ? "bg-primary/10 border-primary/20 text-primary"
+                      : "bg-surface-raised border-border text-muted-foreground hover:text-foreground hover:border-primary/20"
+                  }`}
+                >
+                  {d}m
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Recording controls */}
       {startTime !== null && !isFinished && (
@@ -165,30 +198,42 @@ export function SplitsPanel() {
           {/* Finish button */}
           <button
             onClick={handleFinish}
-            className="w-full h-9 text-xs font-medium rounded-lg bg-red-600/90 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-1.5"
+            disabled={!canFinish}
+            className="w-full h-9 text-xs font-medium rounded-lg bg-red-600/90 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Flag className="w-3.5 h-3.5" />
-            {t("splits.finish")}
+            {canFinish
+              ? t("splits.finishAtDistance", { distance: raceDistance })
+              : t("splits.finishNeedRaceDistance")}
           </button>
         </div>
       )}
 
       {/* Finish summary */}
       {isFinished && finishTime !== null && (
-        <div
-          onClick={() => startTime !== null && seekVideo(startTime + finishTime)}
-          className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-primary/15 transition-colors"
-        >
-          <Trophy className="w-5 h-5 text-primary shrink-0" />
-          <div>
-            <div className="text-[11px] text-muted-foreground font-medium">
-              {t("splits.finalTime")}
+        <div className="space-y-2">
+          <div
+            onClick={() => startTime !== null && seekVideo(startTime + finishTime)}
+            className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-primary/15 transition-colors"
+          >
+            <Trophy className="w-5 h-5 text-primary shrink-0" />
+            <div>
+              <div className="text-[11px] text-muted-foreground font-medium">
+                {t("splits.finalTime")}
+              </div>
+              <div className="text-lg font-bold font-mono text-primary tabular-nums">
+                {formatTime(finishTime)}
+              </div>
+              {finishMemo && <p className="text-[10px] text-muted-foreground mt-0.5">{finishMemo}</p>}
             </div>
-            <div className="text-lg font-bold font-mono text-primary tabular-nums">
-              {formatTime(finishTime)}
-            </div>
-            {finishMemo && <p className="text-[10px] text-muted-foreground mt-0.5">{finishMemo}</p>}
           </div>
+          <button
+            onClick={revertFinish}
+            className="w-full h-8 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/20 transition-colors flex items-center justify-center gap-1.5"
+          >
+            <Pencil className="w-3 h-3" />
+            {t("splits.edit")}
+          </button>
         </div>
       )}
 

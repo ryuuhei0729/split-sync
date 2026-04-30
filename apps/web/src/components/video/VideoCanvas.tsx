@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { useCanvasCompositor } from "@/hooks/useCanvasCompositor";
-import { getStopwatchBounds } from "@/lib/stopwatch/renderer";
+import { getStopwatchBounds, getFinishSummaryBounds } from "@/lib/stopwatch/renderer";
 import { Play, Pause, RotateCcw } from "lucide-react";
 
 export function VideoCanvas() {
@@ -15,6 +15,10 @@ export function VideoCanvas() {
     stopwatchConfig,
     detectedSignalTime,
     startTime,
+    isFinished,
+    finishTime,
+    splitTimes,
+    raceDistance,
     updateStopwatchConfig,
     setVideoMetadata,
     setCurrentVideoTime,
@@ -26,8 +30,10 @@ export function VideoCanvas() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingSummary, setIsDraggingSummary] = useState(false);
   const [isHoveringStopwatch, setIsHoveringStopwatch] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pinchStateRef = useRef<{ startDist: number; startScale: number } | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -111,6 +117,39 @@ export function VideoCanvas() {
     if (!isPlaying) render();
   }, [stopwatchConfig, startTime, render, isPlaying]);
 
+  const wheelStateRef = useRef({
+    isFinished,
+    finishTime,
+    startTime,
+    summaryScale: stopwatchConfig.summaryScale,
+  });
+  useEffect(() => {
+    wheelStateRef.current = {
+      isFinished,
+      finishTime,
+      startTime,
+      summaryScale: stopwatchConfig.summaryScale,
+    };
+  });
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handleWheel = (e: WheelEvent) => {
+      const video = videoRef.current;
+      if (!video) return;
+      const s = wheelStateRef.current;
+      const elapsed = s.startTime !== null ? Math.max(0, video.currentTime - s.startTime) : 0;
+      if (!(s.isFinished && s.finishTime !== null && elapsed >= s.finishTime)) {
+        return;
+      }
+      e.preventDefault();
+      const next = Math.max(0.4, Math.min(3.0, s.summaryScale + e.deltaY * -0.002));
+      updateStopwatchConfig({ summaryScale: next });
+    };
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, [updateStopwatchConfig]);
+
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -183,6 +222,28 @@ export function VideoCanvas() {
       const video = videoRef.current;
       if (!video) return;
       const elapsed = startTime !== null ? Math.max(0, video.currentTime - startTime) : 0;
+
+      const summaryVisible =
+        isFinished && finishTime !== null && elapsed >= finishTime;
+
+      if (summaryVisible && finishTime !== null) {
+        const contentRect = { x: 0, y: 0, width: canvas.width, height: canvas.height };
+        const summaryBounds = getFinishSummaryBounds(ctx, stopwatchConfig, splitTimes, finishTime, raceDistance, contentRect);
+        if (
+          mx >= summaryBounds.x &&
+          mx <= summaryBounds.x + summaryBounds.width &&
+          my >= summaryBounds.y &&
+          my <= summaryBounds.y + summaryBounds.height
+        ) {
+          setIsDraggingSummary(true);
+          dragStartRef.current = { x: mx, y: my };
+          return;
+        }
+        // Tapped outside summary — toggle play
+        togglePlay();
+        return;
+      }
+
       const bounds = getStopwatchBounds(ctx, stopwatchConfig, elapsed);
       if (
         mx >= bounds.x &&
@@ -196,7 +257,7 @@ export function VideoCanvas() {
         togglePlay();
       }
     },
-    [startTime, stopwatchConfig, togglePlay, domToCanvas],
+    [startTime, stopwatchConfig, splitTimes, isFinished, finishTime, raceDistance, togglePlay, domToCanvas],
   );
 
   // Shared pointer-move logic (mouse & touch)
@@ -209,7 +270,17 @@ export function VideoCanvas() {
       if (!coords) return;
       const { mx, my } = coords;
 
-      if (isDragging && dragStartRef.current) {
+      if (isDraggingSummary && dragStartRef.current) {
+        const dx = (mx - dragStartRef.current.x) / canvas.width;
+        const dy = (my - dragStartRef.current.y) / canvas.height;
+        updateStopwatchConfig({
+          summaryPosition: {
+            x: Math.max(0, Math.min(1, stopwatchConfig.summaryPosition.x + dx)),
+            y: Math.max(0, Math.min(1, stopwatchConfig.summaryPosition.y + dy)),
+          },
+        });
+        dragStartRef.current = { x: mx, y: my };
+      } else if (isDragging && dragStartRef.current) {
         const dx = (mx - dragStartRef.current.x) / canvas.width;
         const dy = (my - dragStartRef.current.y) / canvas.height;
 
@@ -235,11 +306,12 @@ export function VideoCanvas() {
         }
       }
     },
-    [isDragging, stopwatchConfig, startTime, updateStopwatchConfig, domToCanvas],
+    [isDragging, isDraggingSummary, stopwatchConfig, startTime, updateStopwatchConfig, domToCanvas],
   );
 
   const handlePointerUp = useCallback(() => {
     setIsDragging(false);
+    setIsDraggingSummary(false);
     setIsHoveringStopwatch(false);
     dragStartRef.current = null;
   }, []);
@@ -257,23 +329,57 @@ export function VideoCanvas() {
   // Touch handlers
   const handleCanvasTouchStart = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
-      if (e.touches.length !== 1) return;
       e.preventDefault();
+      if (e.touches.length === 2) {
+        // Check if summary is visible to start pinch-to-zoom
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (video && canvas) {
+          const elapsed = startTime !== null ? Math.max(0, video.currentTime - startTime) : 0;
+          const summaryVisible =
+            isFinished && finishTime !== null && elapsed >= finishTime;
+          if (summaryVisible) {
+            const t0 = e.touches[0];
+            const t1 = e.touches[1];
+            const dx = t1.clientX - t0.clientX;
+            const dy = t1.clientY - t0.clientY;
+            const startDist = Math.sqrt(dx * dx + dy * dy);
+            pinchStateRef.current = { startDist, startScale: stopwatchConfig.summaryScale };
+            return;
+          }
+        }
+        return;
+      }
+      if (e.touches.length !== 1) return;
       const t = e.touches[0];
       handlePointerDown(t.clientX, t.clientY);
     },
-    [handlePointerDown],
+    [handlePointerDown, isFinished, finishTime, startTime, stopwatchConfig.summaryScale],
   );
   const handleCanvasTouchMove = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
-      if (e.touches.length !== 1) return;
       e.preventDefault();
+      if (e.touches.length === 2 && pinchStateRef.current) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dx = t1.clientX - t0.clientX;
+        const dy = t1.clientY - t0.clientY;
+        const currentDist = Math.sqrt(dx * dx + dy * dy);
+        const ratio = currentDist / pinchStateRef.current.startDist;
+        const next = Math.max(0.4, Math.min(3.0, pinchStateRef.current.startScale * ratio));
+        updateStopwatchConfig({ summaryScale: next });
+        return;
+      }
+      if (e.touches.length !== 1) return;
       const t = e.touches[0];
       handlePointerMove(t.clientX, t.clientY);
     },
-    [handlePointerMove],
+    [handlePointerMove, updateStopwatchConfig],
   );
-  const handleCanvasTouchEnd = useCallback(() => handlePointerUp(), [handlePointerUp]);
+  const handleCanvasTouchEnd = useCallback(() => {
+    pinchStateRef.current = null;
+    handlePointerUp();
+  }, [handlePointerUp]);
 
   const formatTimeDisplay = (t: number) => {
     const m = Math.floor(t / 60);
@@ -294,7 +400,8 @@ export function VideoCanvas() {
         />
         <canvas
           ref={canvasRef}
-          className={`absolute inset-0 w-full h-full object-contain ${isDragging ? "cursor-grabbing" : isHoveringStopwatch ? "cursor-grab" : "cursor-default"}`}
+          className={`absolute inset-0 w-full h-full object-contain ${isDragging || isDraggingSummary ? "cursor-grabbing" : isHoveringStopwatch ? "cursor-grab" : "cursor-default"}`}
+          style={{ touchAction: "none" }}
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handlePointerUp}

@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, Image } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -7,6 +8,8 @@ import { useTranslation } from "react-i18next";
 import { useEditorStore } from "../../stores/editor-store";
 import { useAuth } from "../../contexts/AuthProvider";
 import { colors, spacing, radius, fontSize } from "../../lib/theme";
+
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
 export default function ImportScreen() {
   const { t } = useTranslation();
@@ -49,74 +52,95 @@ export default function ImportScreen() {
     }
   };
 
-  const steps = [t("import.stepImport"), t("import.stepDetect"), t("import.stepExport")];
+  const stepFlow: Array<{ icon: IoniconName; label: string }> = [
+    { icon: "videocam-outline", label: t("import.step1Short") },
+    { icon: "pulse-outline", label: t("import.step2Short") },
+    { icon: "download-outline", label: t("import.step3Short") },
+  ];
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Image source={require("../../assets/icon.png")} style={styles.appIcon} />
-        <Text style={styles.title}>{t("common.appName")}</Text>
-        <Text style={styles.subtitle}>{t("import.subtitle")}</Text>
-
-        {/* Auth action bar */}
-        {user ? (
-          <Pressable
-            style={styles.accountChip}
-            onPress={() => router.push("/account")}
-          >
-            <Ionicons name="person-circle" size={18} color={colors.primary} />
-            <Text style={styles.accountChipText} numberOfLines={1}>
-              {user?.user_metadata?.name || user?.email || t("auth.account")}
-            </Text>
-          </Pressable>
-        ) : (
-          <View style={styles.guestBar}>
-            <Text style={styles.guestLabel}>{t("auth.guestMode")}</Text>
-            <Pressable
-              style={styles.loginChip}
-              onPress={() => router.push("/(auth)/login-method")}
-            >
-              <Text style={styles.loginChipText}>{t("auth.login")}</Text>
-              <Ionicons name="arrow-forward" size={14} color={colors.white} />
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Top bar: auth chip */}
+        <View style={styles.topBar}>
+          {user ? (
+            <Pressable style={styles.accountChip} onPress={() => router.push("/account")}>
+              <Ionicons name="person-circle" size={18} color={colors.primary} />
+              <Text style={styles.accountChipText} numberOfLines={1}>
+                {user?.user_metadata?.name || user?.email || t("auth.account")}
+              </Text>
             </Pressable>
-            <Text style={styles.guestHint}>{t("auth.guestLimitHint")}</Text>
+          ) : (
+            <View style={styles.guestBar}>
+              <Text style={styles.guestLabel}>{t("auth.guestMode")}</Text>
+              <Pressable
+                style={styles.loginChip}
+                onPress={() => router.push("/(auth)/login-method")}
+              >
+                <Text style={styles.loginChipText}>{t("auth.login")}</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.white} />
+              </Pressable>
+            </View>
+          )}
+        </View>
+
+        {/* Hero message */}
+        <View style={styles.heroSection}>
+          <Text style={styles.heroMessage}>{t("import.heroMessage")}</Text>
+        </View>
+
+        {/* Visual step flow */}
+        <View style={styles.stepFlow}>
+          {stepFlow.map((item, i) => (
+            <React.Fragment key={item.label}>
+              <View style={styles.stepCard}>
+                <View style={styles.stepCardIcon}>
+                  <Ionicons name={item.icon} size={20} color={colors.primary} />
+                </View>
+                <Text style={styles.stepCardLabel}>{item.label}</Text>
+              </View>
+              {i < stepFlow.length - 1 && (
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={colors.muted}
+                  style={styles.stepArrow}
+                />
+              )}
+            </React.Fragment>
+          ))}
+        </View>
+
+        {/* Main CTA card */}
+        <View style={styles.ctaCard}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.ctaTouchTarget,
+              pressed && styles.ctaTouchTargetPressed,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={pickVideo}
+            disabled={loading}
+          >
+            <View style={styles.ctaIconCircle}>
+              <Ionicons name="videocam-outline" size={36} color={colors.primary} />
+            </View>
+            <Text style={styles.ctaTitle}>
+              {loading ? t("import.loading") : t("import.selectVideo")}
+            </Text>
+            <Text style={styles.ctaDescription}>{t("import.selectVideoDesc")}</Text>
+          </Pressable>
+        </View>
+
+        {/* Guest hint */}
+        {!user && (
+          <View style={styles.guestHintRow}>
+            <Text style={styles.guestHintText}>{t("auth.guestLimitHint")}</Text>
             <Text style={styles.guestHintSub}>{t("auth.guestRegisterHint")}</Text>
           </View>
         )}
-      </View>
-
-      <Pressable
-        style={({ pressed }) => [
-          styles.card,
-          pressed && styles.cardPressed,
-          loading && styles.cardDisabled,
-        ]}
-        onPress={pickVideo}
-        disabled={loading}
-      >
-        <View style={styles.iconCircle}>
-          <Ionicons name="videocam-outline" size={26} color={colors.muted} />
-        </View>
-        <Text style={styles.cardDescription}>{t("import.selectVideoDesc")}</Text>
-
-        <View style={styles.button}>
-          <Text style={styles.buttonText}>
-            {loading ? t("import.loading") : t("import.selectVideo")}
-          </Text>
-        </View>
-      </Pressable>
-
-      <View style={styles.steps}>
-        {steps.map((label, i) => (
-          <View key={label} style={styles.stepItem}>
-            <View style={[styles.stepDot, i === 0 && styles.stepDotActive]}>
-              <Text style={[styles.stepNumber, i === 0 && styles.stepNumberActive]}>{i + 1}</Text>
-            </View>
-            <Text style={[styles.stepLabel, i === 0 && styles.stepLabelActive]}>{label}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -124,87 +148,100 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    justifyContent: "center",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
     alignItems: "center",
-    padding: spacing.xl,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 48,
-    width: "100%",
-  },
-  appIcon: {
-    width: 180,
-    height: 180,
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: fontSize.xxl,
-    fontWeight: "800",
-    color: colors.text,
-    letterSpacing: -0.5,
+    marginBottom: spacing.xl,
   },
   accountChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#EFF6FF",
-    borderRadius: 20,
-    paddingVertical: 8,
+    backgroundColor: colors.background,
+    borderRadius: radius.xl,
+    paddingVertical: spacing.sm,
     paddingHorizontal: 14,
-    marginTop: spacing.lg,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: colors.primaryBorder,
   },
   accountChipText: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.md,
     fontWeight: "600",
     color: colors.primary,
     flexShrink: 1,
   },
   guestBar: {
+    flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    marginTop: spacing.lg,
   },
   guestLabel: {
-    fontSize: fontSize.xs,
+    fontSize: fontSize.sm,
     color: colors.muted,
-    fontWeight: "500",
-  },
-  guestHint: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: spacing.xs,
-    textAlign: "center",
-    paddingHorizontal: spacing.md,
-  },
-  guestHintSub: {
-    fontSize: 12,
-    color: colors.primary,
     fontWeight: "500",
   },
   loginChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: spacing.xs,
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingVertical: 8,
+    borderRadius: radius.xl,
+    paddingVertical: spacing.sm,
     paddingHorizontal: 14,
   },
   loginChipText: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.md,
     fontWeight: "600",
     color: colors.white,
   },
-  subtitle: {
-    fontSize: fontSize.sm,
-    color: colors.muted,
-    marginTop: spacing.sm,
+  heroSection: {
+    marginBottom: spacing.xl,
+  },
+  heroMessage: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.text,
+    lineHeight: 34,
+    letterSpacing: -0.3,
+  },
+  stepFlow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xl,
+    gap: spacing.xs,
+  },
+  stepCard: {
+    alignItems: "center",
+    gap: spacing.xs,
+    flex: 1,
+  },
+  stepCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: colors.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepCardLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    color: colors.textSecondary,
     textAlign: "center",
   },
-  card: {
+  stepArrow: {
+    marginBottom: 20,
+  },
+  ctaCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     padding: spacing.xl,
@@ -212,89 +249,61 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    marginBottom: spacing.md,
   },
-  iconCircle: {
-    width: 56,
-    height: 56,
+  ctaTouchTarget: {
+    width: "100%",
+    alignItems: "center",
+    paddingVertical: spacing.xl,
+    gap: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.primaryBorder,
+    borderStyle: "dashed",
     borderRadius: radius.lg,
-    backgroundColor: colors.surfaceRaised,
+  },
+  ctaTouchTargetPressed: {
+    backgroundColor: colors.primaryMuted,
+    borderColor: colors.primary,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  ctaIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.xl,
+    backgroundColor: colors.primaryMuted,
     alignItems: "center",
     justifyContent: "center",
   },
-  cardPressed: {
-    opacity: 0.85,
+  ctaTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: "700",
+    color: colors.text,
   },
-  cardDisabled: {
-    opacity: 0.5,
-  },
-  cardDescription: {
+  ctaDescription: {
     fontSize: fontSize.sm,
     color: colors.muted,
     textAlign: "center",
     lineHeight: 18,
   },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.sm,
-    width: "100%",
+  guestHintRow: {
     alignItems: "center",
+    gap: 2,
+    marginBottom: spacing.md,
   },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  steps: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 40,
-    gap: spacing.xl,
-  },
-  stepItem: {
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  stepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepDotActive: {
-    backgroundColor: colors.primaryMuted,
-    borderColor: colors.primaryBorder,
-  },
-  stepNumber: {
+  guestHintText: {
     fontSize: fontSize.xs,
-    fontWeight: "700",
     color: colors.muted,
+    textAlign: "center",
   },
-  stepNumberActive: {
+  guestHintSub: {
+    fontSize: fontSize.xs,
     color: colors.primary,
-  },
-  stepLabel: {
-    fontSize: fontSize.sm,
-    color: colors.muted,
-  },
-  stepLabelActive: {
-    color: colors.text,
-    fontWeight: "600",
+    fontWeight: "500",
   },
 });
