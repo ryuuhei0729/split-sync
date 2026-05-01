@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Text } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Text, ToastAndroid, Platform, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
@@ -16,7 +16,12 @@ export default function EditorScreen() {
   const router = useRouter();
   const startTime = useEditorStore((s) => s.startTime);
   const isFinished = useEditorStore((s) => s.isFinished);
+  const designConfirmed = useEditorStore((s) => s.designConfirmed);
+  const setDesignConfirmed = useEditorStore((s) => s.setDesignConfirmed);
   const [activeTab, setActiveTab] = useState("signal");
+
+  const designLocked = startTime === null;
+  const splitsLocked = startTime === null || !designConfirmed;
 
   const TABS = [
     {
@@ -32,6 +37,7 @@ export default function EditorScreen() {
       icon: ({ color, size }: { color: string; size: number }) => (
         <Ionicons name="color-palette-outline" size={size} color={color} />
       ),
+      disabled: designLocked,
     },
     {
       key: "splits",
@@ -39,16 +45,41 @@ export default function EditorScreen() {
       icon: ({ color, size }: { color: string; size: number }) => (
         <Ionicons name="timer-outline" size={size} color={color} />
       ),
+      disabled: splitsLocked,
     },
   ];
+
+  const showHint = useCallback((message: string) => {
+    if (Platform.OS === "android") {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert("", message);
+    }
+  }, []);
+
+  const handleDisabledTabPress = useCallback(
+    (key: string) => {
+      if (key === "design") {
+        showHint(t("editor.gateSignalRequired"));
+      } else if (key === "splits") {
+        if (startTime === null) {
+          showHint(t("editor.gateSignalRequired"));
+        } else if (!designConfirmed) {
+          showHint(t("editor.gateDesignRequired"));
+        }
+      }
+    },
+    [showHint, t, startTime, designConfirmed],
+  );
 
   const handleSignalConfirm = useCallback(() => {
     setActiveTab("design");
   }, []);
 
   const handleDesignConfirm = useCallback(() => {
+    setDesignConfirmed(true);
     setActiveTab("splits");
-  }, []);
+  }, [setDesignConfirmed]);
 
   // Bottom bar button logic:
   // - design tab + startTime set: "このデザインで確定" → go to splits
@@ -65,7 +96,12 @@ export default function EditorScreen() {
       </View>
 
       {/* Tab Bar */}
-      <TabBar tabs={TABS} activeKey={activeTab} onSelect={setActiveTab} />
+      <TabBar
+        tabs={TABS}
+        activeKey={activeTab}
+        onSelect={setActiveTab}
+        onDisabledPress={handleDisabledTabPress}
+      />
 
       {/* Tab Content (bottom half) */}
       <ScrollView

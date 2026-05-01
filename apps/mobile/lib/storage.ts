@@ -31,7 +31,6 @@ function storage() {
 const KEYS = {
   STOPWATCH_CONFIG: "stopwatch-config",
   MIGRATED: "migrated-from-legacy",
-  SHOW_SPLITS_OVERLAY: "show-splits-overlay",
 } as const;
 
 function migrateFromLegacyStorage(): void {
@@ -59,19 +58,6 @@ export function saveStopwatchConfig(config: StopwatchConfig): void {
   const s = storage();
   if (!s) return;
   s.set(KEYS.STOPWATCH_CONFIG, JSON.stringify(config));
-}
-
-export function saveShowSplitsOverlay(value: boolean): void {
-  const s = storage();
-  if (!s) return;
-  s.set(KEYS.SHOW_SPLITS_OVERLAY, value);
-}
-
-export function loadShowSplitsOverlay(): boolean {
-  const s = storage();
-  if (!s) return true;
-  const stored = s.getBoolean(KEYS.SHOW_SPLITS_OVERLAY);
-  return stored !== undefined ? stored : true;
 }
 
 export function loadStopwatchConfig(): StopwatchConfig {

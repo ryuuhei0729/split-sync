@@ -35,6 +35,7 @@ const en: TranslationShape = {
 
   import: {
     subtitle: "Automatically overlay a stopwatch on your swimming race videos",
+    heroMessage: "Just import a race video — we'll auto-overlay a stopwatch",
     selectVideo: "Select Video",
     selectVideoDesc: "Choose a swimming race video from your photo library",
     dropHere: "Drop your race video here",
@@ -49,6 +50,9 @@ const en: TranslationShape = {
     stepDetectDesc: "Find start signal",
     stepExport: "Export",
     stepExportDesc: "Download result",
+    step1Short: "Pick",
+    step2Short: "Detect",
+    step3Short: "Export",
   },
 
   signal: {
@@ -88,9 +92,13 @@ const en: TranslationShape = {
     title: "Splits",
     record: "Record",
     finish: "Finish",
+    finishAtDistance: "Finish ({{distance}}m)",
+    finishNeedRaceDistance: "Select race distance",
+    raceDistanceLabel: "Race distance",
     edit: "Edit",
     finalTime: "Final Time",
     distancePlaceholder: "Distance (m)",
+    distanceHeader: "Distance",
     memoPlaceholder: "Memo (optional)",
     emptyHint: "Pause the video, enter distance,\nand tap Record to log a split",
     lap: "lap",
@@ -99,13 +107,8 @@ const en: TranslationShape = {
     upgradeToPremium: "Upgrade to Premium for unlimited splits →",
     loginToRecordMore: "Log in to record unlimited splits →",
     overlay: {
-      title: "Lap / Split",
-      tabByDistance: "By Distance",
-      tabAllLap: "All Laps",
-      showOnFinish: "Show on finish",
-      noSplits: "No split times",
-      splitTime: "SPLIT TIME",
-      lapHeader: "25M LAP",
+      splitTime: "SPLIT",
+      lapHeader: "LAP",
     },
   },
 
@@ -153,6 +156,8 @@ const en: TranslationShape = {
     tabDesign: "Design",
     tabSplits: "Splits",
     confirmDesign: "Confirm Design",
+    gateSignalRequired: "Detect the start signal first",
+    gateDesignRequired: "Confirm the design first",
   },
 
   auth: {
@@ -170,6 +175,7 @@ const en: TranslationShape = {
       withApple: "Sign up with Apple",
       withGoogle: "Sign up with Google",
       withEmail: "Sign up with Email",
+      crossAppNotice: "One account works across SwimHub, Scanner, and Timer",
     },
     loginMethod: {
       title: "Log In",
@@ -200,7 +206,7 @@ const en: TranslationShape = {
     planFree: "Free",
     planPremium: "Premium",
     premiumOnly: "Premium only",
-    continueAsGuest: "Continue as Guest",
+    continueAsGuest: "Try without login",
     guestMode: "Guest mode",
     guestLimitHint:
       "Guest users can export up to 1 time per day (resets at midnight JST)",
@@ -215,7 +221,22 @@ const en: TranslationShape = {
     deleteAccountStep2:
       "All data accumulated in SwimHub, including times, videos, and images, will be permanently deleted. Are you absolutely sure?",
     deleteAccountWarning: "All data will be permanently deleted",
+    namePlaceholder: "John Doe",
+    nameLabel: "Name",
+    passwordRequirements: {
+      title: "Password requirements",
+      minLength: "At least 6 characters",
+      lowercase: "Contains a lowercase letter",
+      uppercase: "Contains an uppercase letter",
+      digit: "Contains a number",
+      symbol: "Contains a symbol",
+    },
     errors: {
+      nameRequired: "Please enter your name",
+      passwordMissingLowercase: "Password must contain a lowercase letter",
+      passwordMissingUppercase: "Password must contain an uppercase letter",
+      passwordMissingDigit: "Password must contain a number",
+      passwordMissingSymbol: "Password must contain a symbol",
       cancelled: "Authentication was cancelled",
       generic: "Authentication failed. Please try again.",
       appleLoginFailed: "Apple login failed. Please try again.",

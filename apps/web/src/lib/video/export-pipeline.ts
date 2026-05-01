@@ -1,5 +1,6 @@
 import type { StopwatchConfig, ExportSettings } from "@swimhub-timer/shared";
 import { ffmpegManager, fetchFile } from "./ffmpeg-manager";
+import { SUMMARY_DELAY_SECONDS } from "@/lib/stopwatch/renderer";
 
 // Font file written to FFmpeg's virtual filesystem; must match the path used in writeFile()
 const FONT_PATH = "/tmp/stopwatch.ttf";
@@ -71,9 +72,6 @@ function rgbaToFFmpegColor(rgba: string): string {
       const r = parseInt(match[1]).toString(16).padStart(2, "0");
       const g = parseInt(match[2]).toString(16).padStart(2, "0");
       const b = parseInt(match[3]).toString(16).padStart(2, "0");
-      Math.round(parseFloat(match[4]) * 255)
-        .toString(16)
-        .padStart(2, "0");
       return `#${r}${g}${b}@${parseFloat(match[4]).toFixed(2)}`;
     }
   }
@@ -109,6 +107,8 @@ export async function exportVideoWithStopwatch(
   exportSettings: ExportSettings,
   onProgress: (percent: number) => void,
   showWatermark = true,
+  summaryImageData: Blob | null = null,
+  finishTime: number | null = null,
 ): Promise<Blob> {
   const ffmpeg = await ffmpegManager.load(onProgress);
 
@@ -162,6 +162,14 @@ export async function exportVideoWithStopwatch(
   // Use lower CRF for original resolution to preserve quality
   const crf = exportSettings.resolution === "original" ? "23" : "28";
 
+  // Write summary PNG to virtual FS if present
+  let hasSummary = false;
+  if (summaryImageData !== null && finishTime !== null) {
+    const summaryBuffer = await summaryImageData.arrayBuffer();
+    await ffmpeg.writeFile("summary.png", new Uint8Array(summaryBuffer));
+    hasSummary = true;
+  }
+
   // Try to load watermark icon (only when watermark is enabled)
   let hasIcon = false;
   if (showWatermark) {
@@ -177,8 +185,30 @@ export async function exportVideoWithStopwatch(
     }
   }
 
+  const baseArgs = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", crf, "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "output.mp4"];
+
   // Execute ffmpeg
-  if (hasIcon) {
+  if (hasIcon && hasSummary && finishTime !== null) {
+    const fontSize = watermarkFontSize(watermarkHeight);
+    const iconSize = fontSize;
+    const gap = Math.round(fontSize * 0.3);
+    const textWidthEstimate = Math.round(fontSize * 5.8);
+    const iconX = `W-w-${gap}-${textWidthEstimate}-W*0.03`;
+    const iconY = `H-h-H*0.03`;
+    const summaryEnableT = (startSignalTime + finishTime + SUMMARY_DELAY_SECONDS).toFixed(3);
+    const summaryScale = exportSettings.resolution !== "original" ? `scale=-2:${exportSettings.resolution}` : `scale=iw:ih`;
+
+    await ffmpeg.exec([
+      "-i", "input.mp4",
+      "-i", "icon.png",
+      "-i", "summary.png",
+      "-filter_complex",
+      `[0:v]${filterChain}[bg];[1:v]scale=${iconSize}:${iconSize},format=rgba,colorchannelmixer=aa=0.30[icon];[bg][icon]overlay=${iconX}:${iconY}[tmp];[2:v]${summaryScale}[sum];[tmp][sum]overlay=0:0:enable='gte(t,${summaryEnableT})'[v]`,
+      "-map", "[v]",
+      "-map", "0:a",
+      ...baseArgs,
+    ]);
+  } else if (hasIcon) {
     const fontSize = watermarkFontSize(watermarkHeight);
     const iconSize = fontSize;
     const gap = Math.round(fontSize * 0.3);
@@ -187,49 +217,32 @@ export async function exportVideoWithStopwatch(
     const iconY = `H-h-H*0.03`;
 
     await ffmpeg.exec([
-      "-i",
-      "input.mp4",
-      "-i",
-      "icon.png",
+      "-i", "input.mp4",
+      "-i", "icon.png",
       "-filter_complex",
       `[0:v]${filterChain}[bg];[1:v]scale=${iconSize}:${iconSize},format=rgba,colorchannelmixer=aa=0.30[icon];[bg][icon]overlay=${iconX}:${iconY}[v]`,
-      "-map",
-      "[v]",
-      "-map",
-      "0:a",
-      "-c:v",
-      "libx264",
-      "-preset",
-      "ultrafast",
-      "-crf",
-      crf,
-      "-c:a",
-      "aac",
-      "-b:a",
-      "128k",
-      "-movflags",
-      "+faststart",
-      "output.mp4",
+      "-map", "[v]",
+      "-map", "0:a",
+      ...baseArgs,
+    ]);
+  } else if (hasSummary && finishTime !== null) {
+    const summaryEnableT = (startSignalTime + finishTime + SUMMARY_DELAY_SECONDS).toFixed(3);
+    const summaryScale = exportSettings.resolution !== "original" ? `scale=-2:${exportSettings.resolution}` : `scale=iw:ih`;
+
+    await ffmpeg.exec([
+      "-i", "input.mp4",
+      "-i", "summary.png",
+      "-filter_complex",
+      `[0:v]${filterChain}[bg];[1:v]${summaryScale}[sum];[bg][sum]overlay=0:0:enable='gte(t,${summaryEnableT})'[v]`,
+      "-map", "[v]",
+      "-map", "0:a",
+      ...baseArgs,
     ]);
   } else {
     await ffmpeg.exec([
-      "-i",
-      "input.mp4",
-      "-vf",
-      filterChain,
-      "-c:v",
-      "libx264",
-      "-preset",
-      "ultrafast",
-      "-crf",
-      crf,
-      "-c:a",
-      "aac",
-      "-b:a",
-      "128k",
-      "-movflags",
-      "+faststart",
-      "output.mp4",
+      "-i", "input.mp4",
+      "-vf", filterChain,
+      ...baseArgs,
     ]);
   }
 

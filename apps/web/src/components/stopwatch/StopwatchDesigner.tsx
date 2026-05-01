@@ -1,7 +1,11 @@
 "use client";
 
 import { useEditorStore } from "@/stores/editor-store";
-import { STOPWATCH_PRESETS } from "@swimhub-timer/shared";
+import {
+  STOPWATCH_PRESETS,
+  STOPWATCH_FONT_SIZE_MAX,
+  STOPWATCH_FONT_SIZE_MIN,
+} from "@swimhub-timer/shared";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Palette } from "lucide-react";
@@ -71,8 +75,8 @@ export function StopwatchDesigner() {
           <span className="text-xs font-mono text-primary">{stopwatchConfig.fontSize}px</span>
         </div>
         <Slider
-          min={20}
-          max={80}
+          min={STOPWATCH_FONT_SIZE_MIN}
+          max={STOPWATCH_FONT_SIZE_MAX}
           step={2}
           value={[stopwatchConfig.fontSize]}
           onValueChange={([v]) => updateStopwatchConfig({ fontSize: v })}

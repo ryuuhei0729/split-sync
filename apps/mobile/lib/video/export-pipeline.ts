@@ -1,5 +1,7 @@
-import type { StopwatchConfig, SplitTime, ExportSettings } from "@swimhub-timer/shared";
-import { formatTime } from "@swimhub-timer/shared";
+import type { StopwatchConfig, ExportSettings, SplitTime } from "@swimhub-timer/shared";
+
+const SUMMARY_DELAY_SECONDS = 2;
+const SPLIT_DISPLAY_DURATION_SECONDS = 3;
 
 function getFFmpeg() {
   try {
@@ -7,13 +9,6 @@ function getFFmpeg() {
   } catch {
     throw new Error("FFmpeg is not available. Please use a development build.");
   }
-}
-
-const SPLIT_DISPLAY_DURATION = 3;
-
-/** Escape text for FFmpeg drawtext text value (inside single quotes) */
-function escapeDrawtextText(text: string): string {
-  return text.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/:/g, "\\:").replace(/%/g, "%%");
 }
 
 function rgbaToFFmpegColor(rgba: string): string {
@@ -34,6 +29,7 @@ function buildPositionX(config: StopwatchConfig): string {
   switch (config.anchor) {
     case "top-center":
     case "bottom-center":
+    case "center":
       return `${base}-tw/2`;
     case "top-right":
     case "bottom-right":
@@ -50,6 +46,8 @@ function buildPositionY(config: StopwatchConfig): string {
     case "bottom-center":
     case "bottom-right":
       return `${base}-th`;
+    case "center":
+      return `${base}-th/2`;
     default:
       return base;
   }
@@ -69,15 +67,19 @@ function buildStopwatchFilters(
 ): string[] {
   const startT = startSignalTime.toFixed(3);
 
-  // Elapsed for text expressions (commas escaped with \, for %{eif} syntax)
   const rawText = `max(0\\, t-${startT})`;
   const elapsedText =
     isFinished && finishTime !== null ? `min(${finishTime.toFixed(3)}\\, ${rawText})` : rawText;
 
-  // Elapsed for enable expressions (regular commas, inside single quotes)
   const rawEnable = `max(0, t-${startT})`;
   const elapsedEnable =
     isFinished && finishTime !== null ? `min(${finishTime.toFixed(3)}, ${rawEnable})` : rawEnable;
+
+  // When finished, hide the timer once the summary takes over (finishTime + SUMMARY_DELAY).
+  const timerCutoffGuard =
+    isFinished && finishTime !== null
+      ? `*lt(t, ${(startSignalTime + finishTime + SUMMARY_DELAY_SECONDS).toFixed(3)})`
+      : "";
 
   const minutes = `trunc(${elapsedText}/60)`;
   const seconds = `trunc(mod(${elapsedText}\\,60))`;
@@ -96,109 +98,120 @@ function buildStopwatchFilters(
     `y=${yExpr}`,
   ];
 
-  // SS.xx (under 60 seconds)
   const textUnder60 = `%{eif\\:${seconds}\\:d\\:2}.%{eif\\:${centis}\\:d\\:2}`;
-  // M:SS.xx (60 seconds and above)
   const textOver60 = `%{eif\\:${minutes}\\:d}\\:%{eif\\:${seconds}\\:d\\:2}.%{eif\\:${centis}\\:d\\:2}`;
 
   return [
-    `drawtext=enable='lt(${elapsedEnable}, 60)':${baseParts.join(":")}:text='${textUnder60}'`,
-    `drawtext=enable='gte(${elapsedEnable}, 60)':${baseParts.join(":")}:text='${textOver60}'`,
+    `drawtext=enable='lt(${elapsedEnable}, 60)${timerCutoffGuard}':${baseParts.join(":")}:text='${textUnder60}'`,
+    `drawtext=enable='gte(${elapsedEnable}, 60)${timerCutoffGuard}':${baseParts.join(":")}:text='${textOver60}'`,
   ];
 }
 
 /**
- * Format the split display text (matches StopwatchOverlay preview).
+ * Build drawtext filters for the active split — mirrors the web preview
+ * (apps/web/src/hooks/useCanvasCompositor.ts): each split appears for
+ * SPLIT_DISPLAY_DURATION_SECONDS once its time mark is reached, and is
+ * superseded by the next split if one lands inside that window.
+ *
+ * Format matches the web renderer: "<dist>m: <time>".
  */
-function formatSplitText(split: SplitTime): string {
-  const timeStr = formatTime(split.time);
-  if (split.lapTime !== null) {
-    return `${split.distance}m: ${timeStr} (lap: ${formatTime(split.lapTime)})`;
-  }
-  return `${split.distance}m: ${timeStr}`;
-}
-
-/**
- * Build the Y position for the split display.
- * Below the stopwatch for top anchors, above for bottom anchors.
- */
-function buildSplitPositionY(
-  config: StopwatchConfig,
-  splitFontSize: number,
-  splitPadding: number,
-): string {
-  const gap = 4;
-  const isBottom = config.anchor.startsWith("bottom");
-  const base = `(h*${config.position.y})`;
-
-  if (isBottom) {
-    // Stopwatch box top ≈ base - fontSize - padding
-    // Split goes above: splitY = boxTop - gap - splitFontSize - splitPadding
-    const offset = config.fontSize + config.padding + gap + splitFontSize + splitPadding;
-    return `${base}-${offset}`;
-  } else {
-    // Stopwatch box bottom ≈ base + fontSize + padding
-    // Split goes below: splitY = boxBottom + gap + splitPadding
-    const offset = config.fontSize + config.padding + gap + splitPadding;
-    return `${base}+${offset}`;
-  }
-}
-
-/**
- * Build drawtext filters for split time displays.
- * Each split is shown for up to 3 seconds, but truncated when the next split appears.
- */
-function buildSplitFilters(
+function buildPassedSplitFilters(
   startSignalTime: number,
   config: StopwatchConfig,
-  splitTimes: SplitTime[],
+  finishTime: number | null,
+  splits: SplitTime[],
+  raceDistance: number | null,
 ): string[] {
-  if (splitTimes.length === 0) return [];
+  if (splits.length === 0) return [];
 
-  const splitFontSize = Math.round(config.fontSize * 0.55);
-  const splitPadding = Math.round(config.padding * 0.6);
+  const visible = splits
+    .filter((s) => {
+      if (finishTime !== null && raceDistance !== null) {
+        if (s.distance === raceDistance && s.time === finishTime) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => a.time - b.time);
 
-  const xExpr = buildPositionX(config);
-  const yExpr = buildSplitPositionY(config, splitFontSize, splitPadding);
+  if (visible.length === 0) return [];
 
-  // Sort by time so we can truncate overlapping windows
-  const sorted = [...splitTimes].sort((a, b) => a.time - b.time);
+  const splitFontSize = Math.max(8, Math.round(config.fontSize * 0.55));
+  const splitPad = Math.max(3, Math.round(config.padding * 0.6));
+  const splitGap = Math.max(2, Math.round(config.padding * 0.3));
+  const splitH = splitFontSize + 2 * splitPad;
+  const timerH = config.fontSize + 2 * config.padding;
 
-  const filters: string[] = [];
+  // The split sits below the timer for top/center anchors and above the
+  // timer for bottom anchors — matches renderSplitDisplay() on the web.
+  let splitYExpr: string;
+  switch (config.anchor) {
+    case "top-left":
+    case "top-center":
+    case "top-right":
+      splitYExpr = `(h*${config.position.y}+${timerH + splitGap})`;
+      break;
+    case "center":
+      splitYExpr = `(h*${config.position.y}+${Math.round(timerH / 2) + splitGap})`;
+      break;
+    case "bottom-left":
+    case "bottom-center":
+    case "bottom-right":
+    default:
+      // Timer's top = (h*position.y) - timerH. Split sits ABOVE the timer.
+      splitYExpr = `(h*${config.position.y}-${timerH + splitGap + splitH})`;
+      break;
+  }
 
-  for (let i = 0; i < sorted.length; i++) {
-    const split = sorted[i];
-    const nextSplit = sorted[i + 1];
+  return visible.map((s, i) => {
+    const startT = (startSignalTime + s.time).toFixed(3);
+    const naturalEnd = startSignalTime + s.time + SPLIT_DISPLAY_DURATION_SECONDS;
+    const next = visible[i + 1];
+    // Truncate the window when the next split lands so the latest split wins,
+    // matching the web's "loop backwards and pick the most recent" behavior.
+    const supersededAt = next ? startSignalTime + next.time : Infinity;
+    const summaryAt = finishTime !== null
+      ? startSignalTime + finishTime + SUMMARY_DELAY_SECONDS
+      : Infinity;
+    const endT = Math.min(naturalEnd, supersededAt, summaryAt).toFixed(3);
 
-    const absStart = startSignalTime + split.time;
-    // Truncate at next split's start time if it arrives within the display window
-    const absEnd = nextSplit
-      ? Math.min(absStart + SPLIT_DISPLAY_DURATION, startSignalTime + nextSplit.time)
-      : absStart + SPLIT_DISPLAY_DURATION;
+    const enable = `gte(t,${startT})*lt(t,${endT})`;
 
-    if (absEnd <= absStart) continue;
+    const xExpr = buildPositionX(config);
 
-    const showStart = absStart.toFixed(3);
-    const showEnd = absEnd.toFixed(3);
-
-    const text = escapeDrawtextText(formatSplitText(split));
+    const distLabel = Number.isInteger(s.distance) ? String(s.distance) : s.distance.toString();
+    const text = `${distLabel}m\\: ${formatSecondsForDrawtext(s.time)}`;
 
     const parts = [
-      `enable='gte(t, ${showStart})*lt(t, ${showEnd})'`,
       `fontsize=${splitFontSize}`,
       `fontcolor=${config.textColor}`,
       `box=1`,
       `boxcolor=${rgbaToFFmpegColor(config.backgroundColor)}`,
-      `boxborderw=${splitPadding}`,
+      `boxborderw=${splitPad}`,
       `x=${xExpr}`,
-      `y=${yExpr}`,
+      `y=${splitYExpr}`,
       `text='${text}'`,
     ];
+    return `drawtext=enable='${enable}':${parts.join(":")}`;
+  });
+}
 
-    filters.push(`drawtext=${parts.join(":")}`);
-  }
-
-  return filters;
+/**
+ * Format seconds for a static drawtext label (used for passed splits).
+ * Matches formatTime():
+ *  - < 60s:   SS.xx
+ *  - >= 60s:  M:SS.xx
+ * Note: the FFmpeg ':' separator inside text needs escaping with '\:'.
+ */
+function formatSecondsForDrawtext(seconds: number): string {
+  const totalCenti = Math.round(seconds * 100);
+  const totalSecs = Math.floor(totalCenti / 100);
+  const cs = totalCenti % 100;
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
+  const cs2 = String(cs).padStart(2, "0");
+  const s2 = String(s).padStart(2, "0");
+  if (m === 0) return `${s2}.${cs2}`;
+  return `${m}\\:${s2}.${cs2}`;
 }
 
 /** Resolve the app icon to a local file URI for FFmpeg overlay. */
@@ -218,9 +231,6 @@ function watermarkFontSize(videoHeight: number): number {
   return Math.max(16, Math.round(videoHeight * 0.06));
 }
 
-/**
- * Build a drawtext filter for the "SwimHub Timer" watermark text in the bottom-right corner.
- */
 function buildWatermarkFilter(videoHeight: number): string {
   const fontSize = watermarkFontSize(videoHeight);
   const parts = [
@@ -234,19 +244,134 @@ function buildWatermarkFilter(videoHeight: number): string {
 }
 
 /**
+ * Build the filter_complex string and input args for summary PNG overlay.
+ * Returns the complete command fragment when a summary image is present.
+ *
+ * Stream labeling:
+ *   [0:v] → video base
+ *   [1:v] → icon (if showWatermark && iconUri)
+ *   [2:v] → summary PNG (if summaryImageUri)
+ *
+ * The function returns null when no overlay inputs are needed (falls back to -vf).
+ */
+function buildFilterComplex(params: {
+  drawFilters: string[];
+  iconUri: string | null;
+  summaryImageUri: string | null;
+  startSignalTime: number;
+  finishTime: number | null;
+  watermarkHeight: number;
+  resolution: string;
+}): {
+  filterComplex: string;
+  /** Each entry is a single file path (no -i flag). Caller prepends -i per entry. */
+  inputArgs: string[];
+  outputLabel: string;
+} | null {
+  const { drawFilters, iconUri, summaryImageUri, startSignalTime, finishTime, watermarkHeight, resolution } = params;
+
+  const hasIcon = iconUri !== null;
+  const hasSummary = summaryImageUri !== null;
+
+  if (!hasIcon && !hasSummary) return null;
+
+  const scalePrefix = resolution !== "original" ? `scale=-2:${resolution},` : "";
+  const baseFilters = `${scalePrefix}${drawFilters.join(",")}`;
+
+  if (hasIcon && hasSummary) {
+    // 3-input: video + icon + summary
+    // [0:v]drawtext...[bg]; [1:v]scale..[icon]; [bg][icon]overlay[tmp]; [2:v]scale..[summary]; [tmp][summary]overlay=enable=...[v]
+    const fontSize = watermarkFontSize(watermarkHeight);
+    const iconSize = fontSize;
+    const gap = Math.round(fontSize * 0.3);
+    const textWidthEstimate = Math.round(fontSize * 5.8);
+    const iconX = `W-w-${gap}-${textWidthEstimate}-W*0.03`;
+    const iconY = `H-h-H*0.03`;
+
+    const summaryEnableT =
+      finishTime !== null ? (startSignalTime + finishTime + SUMMARY_DELAY_SECONDS).toFixed(3) : "0";
+    const summaryEnable = `enable='gte(t,${summaryEnableT})'`;
+
+    // PNG is captured at videoWidth × videoHeight (native video size).
+    // Scale it down to match the output resolution so overlay=0:0 aligns pixel-perfect.
+    const summaryScale = resolution !== "original" ? `scale=-2:${resolution}` : `scale=iw:ih`;
+
+    const fc = [
+      `[0:v]${baseFilters}[bg]`,
+      `[1:v]scale=${iconSize}:${iconSize},format=rgba,colorchannelmixer=aa=0.30[icon]`,
+      `[bg][icon]overlay=${iconX}:${iconY}[tmp]`,
+      `[2:v]${summaryScale}[summary]`,
+      `[tmp][summary]overlay=0:0:${summaryEnable}[v]`,
+    ].join(";");
+
+    return {
+      filterComplex: fc,
+      // hasSummary && hasIcon are confirmed non-null above (guarded by hasIcon/hasSummary checks)
+      inputArgs: [iconUri!, summaryImageUri!],
+      outputLabel: "[v]",
+    };
+  }
+
+  if (hasIcon && !hasSummary) {
+    // 2-input: video + icon
+    const fontSize = watermarkFontSize(watermarkHeight);
+    const iconSize = fontSize;
+    const gap = Math.round(fontSize * 0.3);
+    const textWidthEstimate = Math.round(fontSize * 5.8);
+    const iconX = `W-w-${gap}-${textWidthEstimate}-W*0.03`;
+    const iconY = `H-h-H*0.03`;
+
+    const fc = [
+      `[0:v]${baseFilters}[bg]`,
+      `[1:v]scale=${iconSize}:${iconSize},format=rgba,colorchannelmixer=aa=0.30[icon]`,
+      `[bg][icon]overlay=${iconX}:${iconY}[v]`,
+    ].join(";");
+
+    return {
+      filterComplex: fc,
+      // hasIcon confirmed non-null above
+      inputArgs: [iconUri!],
+      outputLabel: "[v]",
+    };
+  }
+
+  // hasSummary && !hasIcon
+  const summaryEnableT = finishTime !== null ? (startSignalTime + finishTime).toFixed(3) : "0";
+  const summaryEnable = `enable='gte(t,${summaryEnableT})'`;
+  // PNG is captured at videoWidth × videoHeight (native video size).
+  // Scale it down to match the output resolution so overlay=0:0 aligns pixel-perfect.
+  const summaryScaleOnly = resolution !== "original" ? `scale=-2:${resolution}` : `scale=iw:ih`;
+
+  const fc = [
+    `[0:v]${baseFilters}[bg]`,
+    `[1:v]${summaryScaleOnly}[summary]`,
+    `[bg][summary]overlay=0:0:${summaryEnable}[v]`,
+  ].join(";");
+
+  return {
+    filterComplex: fc,
+    // hasSummary confirmed non-null above
+    inputArgs: [summaryImageUri!],
+    outputLabel: "[v]",
+  };
+}
+
+/**
  * Export a video with stopwatch overlay using native FFmpeg.
  */
 export async function exportVideoWithStopwatch(
   videoUri: string,
   startSignalTime: number,
   stopwatchConfig: StopwatchConfig,
-  splitTimes: SplitTime[],
   isFinished: boolean,
   finishTime: number | null,
   originalVideoHeight: number,
   exportSettings: ExportSettings,
   onProgress: (percent: number) => void,
   showWatermark = true,
+  summaryImageUri: string | null = null,
+  splitTimes: SplitTime[] = [],
+  raceDistance: number | null = null,
 ): Promise<string> {
   const { Paths, File } = require("expo-file-system") as typeof import("expo-file-system");
   const now = new Date();
@@ -255,8 +380,6 @@ export async function exportVideoWithStopwatch(
   const outputFile = new File(Paths.cache, `swimhub-timer_${timestamp}.mp4`);
   const outputPath = outputFile.uri;
 
-  // Scale font/padding when exporting at different resolution
-  // so the stopwatch maintains the same proportional size as the preview
   let scaledConfig = stopwatchConfig;
   if (exportSettings.resolution !== "original" && originalVideoHeight > 0) {
     const outputHeight = parseInt(exportSettings.resolution);
@@ -269,31 +392,13 @@ export async function exportVideoWithStopwatch(
     };
   }
 
-  // Build filter chain
-  const filters: string[] = [];
-
-  if (exportSettings.resolution !== "original") {
-    filters.push(`scale=-2:${exportSettings.resolution}`);
-  }
-
-  filters.push(...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime));
-  filters.push(...buildSplitFilters(startSignalTime, scaledConfig, splitTimes));
-
-  // Watermark: use output height (after scale) for font sizing
   const watermarkHeight =
     exportSettings.resolution !== "original"
       ? parseInt(exportSettings.resolution)
       : originalVideoHeight;
-  if (showWatermark) {
-    filters.push(buildWatermarkFilter(watermarkHeight));
-  }
-
-  const filterChain = filters.join(",");
-  const crf = exportSettings.resolution === "original" ? "18" : "23";
 
   const { FFmpegKit, FFmpegKitConfig, ReturnCode } = getFFmpeg();
 
-  // Enable progress callback
   FFmpegKitConfig.enableStatisticsCallback((statistics: { getTime: () => number }) => {
     const time = statistics.getTime();
     if (time > 0) {
@@ -301,21 +406,41 @@ export async function exportVideoWithStopwatch(
     }
   });
 
-  // Try to resolve app icon for watermark overlay (only when watermark is enabled)
   const iconUri = showWatermark ? await getWatermarkIconUri() : null;
+  const crf = exportSettings.resolution === "original" ? "18" : "23";
+
+  // filter_complex handles the scale via scalePrefix inside buildFilterComplex ([0:v] stream).
+  // Pass plain draw filters (stopwatch + watermark) without a leading scale here.
+  const drawFiltersForFC = [
+    ...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime),
+    ...buildPassedSplitFilters(startSignalTime, scaledConfig, finishTime, splitTimes, raceDistance),
+    ...(showWatermark ? [buildWatermarkFilter(watermarkHeight)] : []),
+  ];
+
+  const fcResult = buildFilterComplex({
+    drawFilters: drawFiltersForFC,
+    iconUri,
+    summaryImageUri,
+    startSignalTime,
+    finishTime,
+    watermarkHeight,
+    resolution: exportSettings.resolution,
+  });
 
   let command: string;
-  if (iconUri) {
-    // Use filter_complex to overlay icon + drawtext
-    const fontSize = watermarkFontSize(watermarkHeight);
-    const iconSize = fontSize;
-    const gap = Math.round(fontSize * 0.3);
-    const textWidthEstimate = Math.round(fontSize * 5.8);
-    const iconX = `W-w-${gap}-${textWidthEstimate}-W*0.03`;
-    const iconY = `H-h-H*0.03`;
 
-    command = `-y -i "${videoUri}" -i "${iconUri}" -filter_complex "[0:v]${filterChain}[bg];[1:v]scale=${iconSize}:${iconSize},format=rgba,colorchannelmixer=aa=0.30[icon];[bg][icon]overlay=${iconX}:${iconY}[v]" -map "[v]" -map 0:a? -c:v libx264 -preset medium -crf ${crf} -c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
+  if (fcResult) {
+    const inputPart = fcResult.inputArgs.map((p) => `-i "${p}"`).join(" ");
+    command = `-y -i "${videoUri}" ${inputPart} -filter_complex "${fcResult.filterComplex}" -map "${fcResult.outputLabel}" -map 0:a? -c:v libx264 -preset medium -crf ${crf} -c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
   } else {
+    // No overlay inputs — use simple -vf
+    const scaleFilter = exportSettings.resolution !== "original" ? `scale=-2:${exportSettings.resolution},` : "";
+    const vfFilters = [
+      ...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime),
+      ...buildPassedSplitFilters(startSignalTime, scaledConfig, finishTime, splitTimes, raceDistance),
+      ...(showWatermark ? [buildWatermarkFilter(watermarkHeight)] : []),
+    ];
+    const filterChain = `${scaleFilter}${vfFilters.join(",")}`;
     command = `-y -i "${videoUri}" -vf "${filterChain}" -c:v libx264 -preset medium -crf ${crf} -c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
   }
 
@@ -345,15 +470,19 @@ export async function saveToPhotoLibrary(filePath: string): Promise<void> {
 
 /**
  * Clean up temporary export files.
+ * Accepts both the encoded output path and the intermediate summary PNG path.
  */
-export async function cleanupExportFiles(outputPath?: string): Promise<void> {
-  try {
-    if (outputPath) {
-      const { File } = require("expo-file-system") as typeof import("expo-file-system");
-      const file = new File(outputPath);
-      file.delete();
+export async function cleanupExportFiles(
+  outputPath?: string | null,
+  summaryImageUri?: string | null,
+): Promise<void> {
+  const { File } = require("expo-file-system") as typeof import("expo-file-system");
+  for (const uri of [outputPath, summaryImageUri]) {
+    if (!uri) continue;
+    try {
+      new File(uri).delete();
+    } catch {
+      // Ignore cleanup errors
     }
-  } catch {
-    // Ignore cleanup errors
   }
 }

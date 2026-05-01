@@ -2,11 +2,15 @@ import { useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useEditorStore } from "../../stores/editor-store";
-import { STOPWATCH_PRESETS } from "@swimhub-timer/shared";
+import {
+  STOPWATCH_PRESETS,
+  STOPWATCH_FONT_SIZE_MAX,
+  STOPWATCH_FONT_SIZE_MIN,
+} from "@swimhub-timer/shared";
 import { colors, spacing, radius, fontSize } from "../../lib/theme";
 
-const SIZE_MIN = 20;
-const SIZE_MAX = 80;
+const SIZE_MIN = STOPWATCH_FONT_SIZE_MIN;
+const SIZE_MAX = STOPWATCH_FONT_SIZE_MAX;
 
 export function StopwatchDesigner() {
   const { t } = useTranslation();

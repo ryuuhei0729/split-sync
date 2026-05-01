@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { notFound } from "next/navigation";
 import { I18nProvider } from "@/components/I18nProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { KeyboardScrollProvider } from "@/components/keyboard/KeyboardScrollProvider";
 import { supportedLocales, i18nResources, type SupportedLocale } from "@swimhub-timer/i18n";
 
 const inter = Inter({
@@ -120,8 +121,10 @@ export default async function LocaleLayout({
       <body className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}>
         <I18nProvider locale={locale}>
           <AuthProvider>
-            <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
-            {children}
+            <KeyboardScrollProvider>
+              <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
+              {children}
+            </KeyboardScrollProvider>
           </AuthProvider>
         </I18nProvider>
       </body>

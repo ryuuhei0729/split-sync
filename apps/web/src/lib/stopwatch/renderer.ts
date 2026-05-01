@@ -1,5 +1,7 @@
 import type { StopwatchConfig, SplitTime } from "@swimhub-timer/shared";
-import { formatTime } from "@swimhub-timer/shared";
+import { formatTime, calculateRaceLapTimesTable, getVisibleLapIntervals } from "@swimhub-timer/shared";
+
+export const SUMMARY_DELAY_SECONDS = 2;
 
 /**
  * Measure the maximum digit width for the current ctx.font,
@@ -59,6 +61,10 @@ function calculatePosition(
       break;
     case "top-right":
       x = px - boxWidth;
+      break;
+    case "center":
+      x = px - boxWidth / 2;
+      y = py - boxHeight / 2;
       break;
     case "bottom-left":
       y = py - boxHeight;
@@ -165,15 +171,9 @@ export function renderSplitDisplay(
 
   const gap = 4;
 
-  const isBottomAnchor = config.anchor.startsWith("bottom");
-
-  let y: number;
-
-  if (isBottomAnchor) {
-    y = swBounds.y - gap - boxHeight;
-  } else {
-    y = swBounds.y + swBounds.height + gap;
-  }
+  // Always render the split below the stopwatch so the timer's top edge
+  // stays fixed when a split appears, regardless of the anchor.
+  const y = swBounds.y + swBounds.height + gap;
 
   // Align horizontally with stopwatch center
   const x = swBounds.x + (swBounds.width - boxWidth) / 2;
@@ -273,4 +273,209 @@ export function getStopwatchBounds(
     ctx.canvas.height,
   );
   return { x, y, width: boxWidth, height: boxHeight };
+}
+
+interface SummaryLayout {
+  x: number;
+  y: number;
+  totalWidth: number;
+  totalHeight: number;
+  pad: number;
+  rowHeight: number;
+  headerHeight: number;
+  colWidths: number[];
+  cols: string[];
+  effectiveRace: number;
+  raceRows: ReturnType<typeof calculateRaceLapTimesTable>;
+  intervals: number[];
+  showFinalRow: boolean;
+}
+
+function computeSummaryLayout(
+  ctx: CanvasRenderingContext2D,
+  config: StopwatchConfig,
+  splitTimes: SplitTime[],
+  finishTime: number,
+  raceDistance: number | null,
+  contentRect: { x: number; y: number; width: number; height: number },
+): SummaryLayout {
+  const scale = config.summaryScale;
+  const pad = config.padding * scale;
+  const baseFontSize = Math.max(8, Math.round(13 * scale));
+  const headerFontSize = Math.max(7, Math.round(10 * scale));
+
+  const sortedSplits = [...splitTimes].sort((a, b) => a.distance - b.distance);
+  const effectiveRace =
+    raceDistance ?? (sortedSplits.length > 0 ? sortedSplits[sortedSplits.length - 1].distance : 0);
+
+  const raceRows =
+    effectiveRace > 0
+      ? calculateRaceLapTimesTable(
+          sortedSplits.map((s) => ({ distance: s.distance, splitTime: s.time })),
+          effectiveRace,
+        )
+      : [];
+  const intervals = effectiveRace > 0 ? getVisibleLapIntervals(raceRows, effectiveRace) : [];
+
+  // Build column headers
+  const cols = ["Dist", "Split", ...intervals.map((i) => `${i}M`)];
+
+  // Measure column widths
+  ctx.font = `bold ${baseFontSize}px monospace`;
+  const timeStr = formatTime(finishTime);
+  const timeWidth = measureTextTabular(ctx, timeStr);
+
+  ctx.font = `${headerFontSize}px monospace`;
+  const distHeaderW = ctx.measureText("Dist").width;
+  const splitHeaderW = ctx.measureText("Split").width;
+
+  ctx.font = `bold ${baseFontSize}px monospace`;
+  const distW = Math.max(
+    distHeaderW,
+    ...raceRows.map((r) => ctx.measureText(`${r.distance}m`).width),
+    effectiveRace > 0 ? ctx.measureText(`${effectiveRace}m`).width : 0,
+  );
+
+  const splitW = Math.max(splitHeaderW, timeWidth);
+
+  const lapW =
+    intervals.length > 0
+      ? Math.max(...intervals.map((i) => ctx.measureText(`${i}M`).width), timeWidth)
+      : 0;
+
+  const colWidths: number[] = [
+    distW + pad,
+    splitW + pad,
+    ...intervals.map(() => lapW + pad),
+  ];
+
+  const rowHeight = baseFontSize + pad;
+  const headerHeight = headerFontSize + pad * 0.5;
+  const showFinalRow = !raceRows.some((r) => r.distance === effectiveRace) && effectiveRace > 0;
+  const dataRows = raceRows.length + (showFinalRow ? 1 : 0);
+  const totalWidth = colWidths.reduce((a, b) => a + b, 0) + pad * 2;
+  const totalHeight = headerHeight + dataRows * rowHeight + pad * 2;
+
+  // Position using summaryPosition + summaryAnchor
+  const fakeConfig: StopwatchConfig = {
+    ...config,
+    position: config.summaryPosition,
+    anchor: config.summaryAnchor,
+  };
+  const { x, y } = calculatePosition(fakeConfig, totalWidth, totalHeight, contentRect.width, contentRect.height);
+
+  return { x: x + contentRect.x, y: y + contentRect.y, totalWidth, totalHeight, pad, rowHeight, headerHeight, colWidths, cols, effectiveRace, raceRows, intervals, showFinalRow };
+}
+
+export function renderFinishSummary(
+  ctx: CanvasRenderingContext2D,
+  config: StopwatchConfig,
+  splitTimes: SplitTime[],
+  finishTime: number,
+  raceDistance: number | null,
+  contentRect: { x: number; y: number; width: number; height: number },
+): void {
+  const scale = config.summaryScale;
+  const baseFontSize = Math.max(8, Math.round(13 * scale));
+  const headerFontSize = Math.max(7, Math.round(10 * scale));
+
+  const layout = computeSummaryLayout(ctx, config, splitTimes, finishTime, raceDistance, contentRect);
+  const { x, y, totalWidth, totalHeight, pad, rowHeight, headerHeight, colWidths, cols, effectiveRace, raceRows, intervals, showFinalRow } = layout;
+
+  // Background
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.beginPath();
+  const r = Math.max(4, Math.round(8 * scale));
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + totalWidth - r, y);
+  ctx.quadraticCurveTo(x + totalWidth, y, x + totalWidth, y + r);
+  ctx.lineTo(x + totalWidth, y + totalHeight - r);
+  ctx.quadraticCurveTo(x + totalWidth, y + totalHeight, x + totalWidth - r, y + totalHeight);
+  ctx.lineTo(x + r, y + totalHeight);
+  ctx.quadraticCurveTo(x, y + totalHeight, x, y + totalHeight - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = config.textColor;
+  ctx.textBaseline = "top";
+
+  // Lap interval columns are center-aligned within their cell content area
+  // (the trailing `pad` in colWidths is a gutter to the next column, so the
+  // visible cell width is colWidths[i] - pad).
+  const lapCellContentWidth = (ci: number) => colWidths[ci] - pad;
+
+  // Header row
+  ctx.font = `${headerFontSize}px monospace`;
+  ctx.globalAlpha = 0.7;
+  let cx = x + pad;
+  const headerY = y + pad;
+  for (let ci = 0; ci < cols.length; ci++) {
+    const label = cols[ci];
+    if (ci >= 2) {
+      const w = ctx.measureText(label).width;
+      ctx.fillText(label, cx + (lapCellContentWidth(ci) - w) / 2, headerY);
+    } else {
+      ctx.fillText(label, cx, headerY);
+    }
+    cx += colWidths[ci];
+  }
+  ctx.globalAlpha = 1.0;
+
+  // Data rows
+  ctx.font = `bold ${baseFontSize}px monospace`;
+  let rowY = y + pad + headerHeight;
+
+  for (const row of raceRows) {
+    cx = x + pad;
+    // Dist
+    ctx.fillText(`${row.distance}m`, cx, rowY);
+    cx += colWidths[0];
+    // Split
+    fillTextTabular(ctx, row.splitTime !== null ? formatTime(row.splitTime) : "-", cx, rowY);
+    cx += colWidths[1];
+    // Lap columns (center-aligned)
+    for (let ci = 0; ci < intervals.length; ci++) {
+      const lap = row.lapTimes[intervals[ci]];
+      const text = lap !== null && lap !== undefined ? formatTime(lap) : "-";
+      const w = measureTextTabular(ctx, text);
+      const colIdx = 2 + ci;
+      fillTextTabular(ctx, text, cx + (lapCellContentWidth(colIdx) - w) / 2, rowY);
+      cx += colWidths[colIdx];
+    }
+    rowY += rowHeight;
+  }
+
+  // Final row (highlighted)
+  if (showFinalRow) {
+    // Slight highlight background
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.fillRect(x + pad * 0.5, rowY - pad * 0.25, totalWidth - pad, rowHeight);
+    ctx.fillStyle = config.textColor;
+
+    cx = x + pad;
+    ctx.fillText(`${effectiveRace}m`, cx, rowY);
+    cx += colWidths[0];
+    fillTextTabular(ctx, formatTime(finishTime), cx, rowY);
+    cx += colWidths[1];
+    for (let ci = 0; ci < intervals.length; ci++) {
+      const colIdx = 2 + ci;
+      const w = ctx.measureText("-").width;
+      ctx.fillText("-", cx + (lapCellContentWidth(colIdx) - w) / 2, rowY);
+      cx += colWidths[colIdx];
+    }
+  }
+}
+
+export function getFinishSummaryBounds(
+  ctx: CanvasRenderingContext2D,
+  config: StopwatchConfig,
+  splitTimes: SplitTime[],
+  finishTime: number,
+  raceDistance: number | null,
+  contentRect: { x: number; y: number; width: number; height: number },
+): { x: number; y: number; width: number; height: number } {
+  const layout = computeSummaryLayout(ctx, config, splitTimes, finishTime, raceDistance, contentRect);
+  return { x: layout.x, y: layout.y, width: layout.totalWidth, height: layout.totalHeight };
 }

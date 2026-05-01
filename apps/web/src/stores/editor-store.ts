@@ -34,13 +34,10 @@ interface EditorState {
   splitTimes: SplitTime[];
   currentDistanceInput: string;
   currentMemoInput: string;
+  raceDistance: number | null;
   isFinished: boolean;
   finishTime: number | null;
   finishMemo: string;
-
-  // Splits overlay
-  showSplitsOverlay: boolean;
-  setShowSplitsOverlay: (v: boolean) => void;
 
   setStep: (step: EditorStep) => void;
   setVideoFile: (file: File) => void;
@@ -58,9 +55,11 @@ interface EditorState {
   setIsExporting: (exporting: boolean) => void;
   setCurrentDistanceInput: (value: string) => void;
   setCurrentMemoInput: (value: string) => void;
+  setRaceDistance: (distance: number | null) => void;
   recordSplit: (elapsedSeconds: number) => void;
   removeSplit: (index: number) => void;
   finishRecording: (elapsedSeconds: number, memo?: string) => void;
+  revertFinish: () => void;
   resetSplits: () => void;
   reset: () => void;
 }
@@ -84,10 +83,10 @@ const initialState = {
   splitTimes: [] as SplitTime[],
   currentDistanceInput: "",
   currentMemoInput: "",
+  raceDistance: null as number | null,
   isFinished: false,
   finishTime: null as number | null,
   finishMemo: "",
-  showSplitsOverlay: false,
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -108,12 +107,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({
       ...initialState,
       stopwatchConfig: get().stopwatchConfig,
-      splitTimes: [],
-      currentDistanceInput: "",
-      currentMemoInput: "",
-      isFinished: false,
-      finishTime: null,
-      finishMemo: "",
     });
   },
 
@@ -144,6 +137,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   clearPendingSeek: () => set({ pendingVideoSeek: null }),
   setCurrentDistanceInput: (value) => set({ currentDistanceInput: value }),
   setCurrentMemoInput: (value) => set({ currentMemoInput: value }),
+  setRaceDistance: (distance) => set({ raceDistance: distance }),
 
   recordSplit: (elapsedSeconds) => {
     const { currentDistanceInput, currentMemoInput, splitTimes } = get();
@@ -178,20 +172,56 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   finishRecording: (elapsedSeconds, memo) => {
-    set({ isFinished: true, finishTime: elapsedSeconds, finishMemo: (memo ?? "").trim() });
+    const { raceDistance, splitTimes } = get();
+    // Auto-record a split at raceDistance so renderFinishSummary can compute
+    // final lap times consistently with the rest of the rows.
+    let updatedSplits = splitTimes;
+    if (raceDistance !== null && raceDistance > 0) {
+      const filtered = splitTimes.filter((s) => s.distance !== raceDistance);
+      updatedSplits = [
+        ...filtered,
+        {
+          distance: raceDistance,
+          time: elapsedSeconds,
+          lapTime: null,
+          memo: (memo ?? "").trim(),
+        },
+      ].sort((a, b) => a.distance - b.distance);
+    }
+    set({
+      splitTimes: updatedSplits,
+      isFinished: true,
+      finishTime: elapsedSeconds,
+      finishMemo: (memo ?? "").trim(),
+    });
   },
 
-  setShowSplitsOverlay: (v) => set({ showSplitsOverlay: v }),
+  revertFinish: () => {
+    const { splitTimes, finishTime, raceDistance } = get();
+    // Drop the auto-added finish split (only if it still matches finishTime).
+    let restored = splitTimes;
+    if (raceDistance !== null && raceDistance > 0 && finishTime !== null) {
+      restored = splitTimes.filter(
+        (s) => !(s.distance === raceDistance && s.time === finishTime),
+      );
+    }
+    set({
+      splitTimes: restored,
+      isFinished: false,
+      finishTime: null,
+      finishMemo: "",
+    });
+  },
 
   resetSplits: () => {
     set({
       splitTimes: [],
       currentDistanceInput: "",
       currentMemoInput: "",
+      raceDistance: null,
       isFinished: false,
       finishTime: null,
       finishMemo: "",
-      showSplitsOverlay: false,
     });
   },
 

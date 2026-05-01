@@ -1,18 +1,29 @@
 import type { StopwatchPreset } from "../types/stopwatch";
 
+export const STOPWATCH_FONT_SIZE_MIN = 60;
+export const STOPWATCH_FONT_SIZE_MAX = 200;
+export const STOPWATCH_FONT_SIZE_DEFAULT = 130;
+
+const SHARED_LAYOUT = {
+  fontSize: STOPWATCH_FONT_SIZE_DEFAULT,
+  position: { x: 0.5, y: 0.5 },
+  anchor: "center",
+  summaryPosition: { x: 0.5, y: 0.5 },
+  summaryAnchor: "center",
+  summaryScale: 1,
+} as const;
+
 export const STOPWATCH_PRESETS: StopwatchPreset[] = [
   {
     id: "classic-digital",
     name: "Classic Digital",
     config: {
       fontFamily: "monospace",
-      fontSize: 48,
       textColor: "#00FF00",
       backgroundColor: "rgba(0,0,0,0.8)",
       borderRadius: 4,
       padding: 12,
-      position: { x: 0.95, y: 0.05 },
-      anchor: "top-right",
+      ...SHARED_LAYOUT,
     },
   },
   {
@@ -20,13 +31,11 @@ export const STOPWATCH_PRESETS: StopwatchPreset[] = [
     name: "Minimal White",
     config: {
       fontFamily: "sans-serif",
-      fontSize: 36,
       textColor: "#FFFFFF",
       backgroundColor: "rgba(0,0,0,0.4)",
       borderRadius: 8,
       padding: 10,
-      position: { x: 0.05, y: 0.05 },
-      anchor: "top-left",
+      ...SHARED_LAYOUT,
     },
   },
   {
@@ -34,13 +43,11 @@ export const STOPWATCH_PRESETS: StopwatchPreset[] = [
     name: "Broadcast",
     config: {
       fontFamily: "sans-serif",
-      fontSize: 56,
       textColor: "#FFFFFF",
       backgroundColor: "rgba(0,50,120,0.85)",
       borderRadius: 6,
       padding: 16,
-      position: { x: 0.5, y: 0.92 },
-      anchor: "bottom-center",
+      ...SHARED_LAYOUT,
     },
   },
   {
@@ -48,13 +55,11 @@ export const STOPWATCH_PRESETS: StopwatchPreset[] = [
     name: "Competition Red",
     config: {
       fontFamily: "monospace",
-      fontSize: 44,
       textColor: "#FFFFFF",
       backgroundColor: "rgba(200,30,30,0.85)",
       borderRadius: 4,
       padding: 12,
-      position: { x: 0.05, y: 0.92 },
-      anchor: "bottom-left",
+      ...SHARED_LAYOUT,
     },
   },
 ];

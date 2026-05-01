@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useEditorStore } from "@/stores/editor-store";
-import { renderStopwatch, renderSplitDisplay, renderWatermark } from "@/lib/stopwatch/renderer";
+import { renderStopwatch, renderSplitDisplay, renderWatermark, renderFinishSummary } from "@/lib/stopwatch/renderer";
 
 export function useCanvasCompositor(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   videoRef: React.RefObject<HTMLVideoElement | null>,
 ) {
   const animationRef = useRef<number>(0);
-  const { stopwatchConfig, startTime, splitTimes, isFinished, finishTime } = useEditorStore();
+  const { stopwatchConfig, startTime, splitTimes, isFinished, finishTime, raceDistance } = useEditorStore();
 
   const renderRef = useRef<() => void>(() => {});
 
@@ -40,29 +40,38 @@ export function useCanvasCompositor(
       if (isFinished && finishTime !== null && elapsed > finishTime) {
         elapsed = finishTime;
       }
-      renderStopwatch(ctx, stopwatchConfig, elapsed);
-      renderWatermark(ctx);
 
-      // Show split for 3 seconds after passing its time point
-      if (splitTimes.length > 0) {
-        const SPLIT_DISPLAY_DURATION = 3;
-        // Find the most recent split that we've passed
-        let activeSplit = null;
-        for (let i = splitTimes.length - 1; i >= 0; i--) {
-          const s = splitTimes[i];
-          if (elapsed >= s.time && elapsed < s.time + SPLIT_DISPLAY_DURATION) {
-            activeSplit = s;
-            break;
+      const summaryVisible =
+        isFinished && finishTime !== null && elapsed >= finishTime;
+
+      if (summaryVisible && finishTime !== null) {
+        const contentRect = { x: 0, y: 0, width: canvas.width, height: canvas.height };
+        renderFinishSummary(ctx, stopwatchConfig, splitTimes, finishTime, raceDistance, contentRect);
+      } else {
+        renderStopwatch(ctx, stopwatchConfig, elapsed);
+
+        // Show split for 3 seconds after passing its time point
+        if (splitTimes.length > 0) {
+          const SPLIT_DISPLAY_DURATION = 3;
+          let activeSplit = null;
+          for (let i = splitTimes.length - 1; i >= 0; i--) {
+            const s = splitTimes[i];
+            if (elapsed >= s.time && elapsed < s.time + SPLIT_DISPLAY_DURATION) {
+              activeSplit = s;
+              break;
+            }
           }
-        }
-        if (activeSplit) {
-          renderSplitDisplay(ctx, stopwatchConfig, elapsed, activeSplit);
+          if (activeSplit) {
+            renderSplitDisplay(ctx, stopwatchConfig, elapsed, activeSplit);
+          }
         }
       }
 
+      renderWatermark(ctx);
+
       animationRef.current = requestAnimationFrame(render);
     };
-  }, [canvasRef, videoRef, stopwatchConfig, startTime, splitTimes, isFinished, finishTime, render]);
+  }, [canvasRef, videoRef, stopwatchConfig, startTime, splitTimes, isFinished, finishTime, raceDistance, render]);
 
   const start = useCallback(() => {
     animationRef.current = requestAnimationFrame(render);
