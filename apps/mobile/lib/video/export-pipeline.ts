@@ -1,4 +1,6 @@
-import type { StopwatchConfig, ExportSettings, SplitTime } from "@swimhub-timer/shared";
+import { Platform } from "react-native";
+import type { StopwatchConfig, ExportSettings, SplitTime, ExportResolution } from "@swimhub-timer/shared";
+import type { StreamInformation } from "ffmpeg-kit-react-native";
 
 const SUMMARY_DELAY_SECONDS = 2;
 const SPLIT_DISPLAY_DURATION_SECONDS = 3;
@@ -8,6 +10,74 @@ function getFFmpeg() {
     return require("ffmpeg-kit-react-native");
   } catch {
     throw new Error("FFmpeg is not available. Please use a development build.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hardware encoder helpers (pure functions)
+// ---------------------------------------------------------------------------
+
+export function getHwEncoder(): "h264_videotoolbox" | "h264_mediacodec" | null {
+  if (Platform.OS === "ios") return "h264_videotoolbox";
+  if (Platform.OS === "android") return "h264_mediacodec";
+  return null;
+}
+
+export function buildHwDecodeArgs(useHw: boolean): string {
+  if (!useHw) return "";
+  if (Platform.OS === "ios") return "-hwaccel videotoolbox";
+  if (Platform.OS === "android") return "-hwaccel mediacodec";
+  return "";
+}
+
+export function buildVideoBitrateArgs(resolution: ExportResolution): string {
+  switch (resolution) {
+    case "original":
+    case "1080":
+      return "-b:v 10M -maxrate 12M -bufsize 16M";
+    case "720":
+    default:
+      return "-b:v 5M -maxrate 6M -bufsize 8M";
+  }
+}
+
+export function buildVideoEncoderArgs(
+  encoder: "h264_videotoolbox" | "h264_mediacodec" | null,
+  resolution: ExportResolution,
+  crf: string,
+): string {
+  if (encoder === null) {
+    return `-c:v libx264 -preset veryfast -crf ${crf}`;
+  }
+  return `-c:v ${encoder} ${buildVideoBitrateArgs(resolution)}`;
+}
+
+export function buildAudioArgs(audioCodec: string | null): string {
+  if (audioCodec?.toLowerCase() === "aac") {
+    return "-c:a copy";
+  }
+  return "-c:a aac -b:a 128k";
+}
+
+// ---------------------------------------------------------------------------
+// Audio codec detection (side-effectful)
+// ---------------------------------------------------------------------------
+
+export async function detectAudioCodec(videoUri: string): Promise<string | null> {
+  try {
+    const { FFprobeKit } = getFFmpeg();
+    const session = await FFprobeKit.getMediaInformation(videoUri);
+    const info = session.getMediaInformation();
+    if (!info) return null;
+    const streams: StreamInformation[] = info.getStreams();
+    for (const stream of streams) {
+      if (stream.getType() === "audio") {
+        return stream.getCodec();
+      }
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -54,32 +124,28 @@ function buildPositionY(config: StopwatchConfig): string {
 }
 
 /**
- * Build drawtext filters for the main stopwatch timer.
- * Uses separate filters to match formatTime() output:
- *  - < 60s:   SS.xx
- *  - >= 60s:  M:SS.xx
+ * Build drawtext filters for the main stopwatch timer. Uses two filters with
+ * mutually-exclusive `enable` clauses so the format matches the preview's
+ * `formatTime()` exactly:
+ *   - elapsed < 60s:   SS.xx     (no minute prefix)
+ *   - elapsed >= 60s:  M:SS.xx
  */
 function buildStopwatchFilters(
   startSignalTime: number,
   config: StopwatchConfig,
   isFinished: boolean,
   finishTime: number | null,
+  fontPath: string | null,
 ): string[] {
   const startT = startSignalTime.toFixed(3);
 
   const rawText = `max(0\\, t-${startT})`;
   const elapsedText =
     isFinished && finishTime !== null ? `min(${finishTime.toFixed(3)}\\, ${rawText})` : rawText;
-
-  const rawEnable = `max(0, t-${startT})`;
   const elapsedEnable =
-    isFinished && finishTime !== null ? `min(${finishTime.toFixed(3)}, ${rawEnable})` : rawEnable;
-
-  // When finished, hide the timer once the summary takes over (finishTime + SUMMARY_DELAY).
-  const timerCutoffGuard =
     isFinished && finishTime !== null
-      ? `*lt(t, ${(startSignalTime + finishTime + SUMMARY_DELAY_SECONDS).toFixed(3)})`
-      : "";
+      ? `min(${finishTime.toFixed(3)}, max(0, t-${startSignalTime.toFixed(3)}))`
+      : `max(0, t-${startSignalTime.toFixed(3)})`;
 
   const minutes = `trunc(${elapsedText}/60)`;
   const seconds = `trunc(mod(${elapsedText}\\,60))`;
@@ -88,7 +154,9 @@ function buildStopwatchFilters(
   const xExpr = buildPositionX(config);
   const yExpr = buildPositionY(config);
 
+  const fontPart = fontfileArg(fontPath);
   const baseParts = [
+    ...(fontPart ? [fontPart] : []),
     `fontsize=${config.fontSize}`,
     `fontcolor=${config.textColor}`,
     `box=1`,
@@ -98,12 +166,23 @@ function buildStopwatchFilters(
     `y=${yExpr}`,
   ];
 
-  const textUnder60 = `%{eif\\:${seconds}\\:d\\:2}.%{eif\\:${centis}\\:d\\:2}`;
+  // Match formatTime():
+  //  - <60s: `${s}.${pad2(cs)}` (seconds not zero-padded)
+  //  - >=60s: `${m}:${pad2(s)}.${pad2(cs)}` (minutes not zero-padded, seconds padded)
+  const textUnder60 = `%{eif\\:${seconds}\\:d}.%{eif\\:${centis}\\:d\\:2}`;
   const textOver60 = `%{eif\\:${minutes}\\:d}\\:%{eif\\:${seconds}\\:d\\:2}.%{eif\\:${centis}\\:d\\:2}`;
 
+  const cutoffGuard =
+    isFinished && finishTime !== null
+      ? `*lt(t, ${(startSignalTime + finishTime + SUMMARY_DELAY_SECONDS).toFixed(3)})`
+      : "";
+
+  const under60Enable = `lt(${elapsedEnable}, 60)${cutoffGuard}`;
+  const over60Enable = `gte(${elapsedEnable}, 60)${cutoffGuard}`;
+
   return [
-    `drawtext=enable='lt(${elapsedEnable}, 60)${timerCutoffGuard}':${baseParts.join(":")}:text='${textUnder60}'`,
-    `drawtext=enable='gte(${elapsedEnable}, 60)${timerCutoffGuard}':${baseParts.join(":")}:text='${textOver60}'`,
+    `drawtext=enable='${under60Enable}':${baseParts.join(":")}:text='${textUnder60}'`,
+    `drawtext=enable='${over60Enable}':${baseParts.join(":")}:text='${textOver60}'`,
   ];
 }
 
@@ -121,6 +200,7 @@ function buildPassedSplitFilters(
   finishTime: number | null,
   splits: SplitTime[],
   raceDistance: number | null,
+  fontPath: string | null,
 ): string[] {
   if (splits.length === 0) return [];
 
@@ -136,18 +216,21 @@ function buildPassedSplitFilters(
   if (visible.length === 0) return [];
 
   const splitFontSize = Math.max(8, Math.round(config.fontSize * 0.55));
+  const splitMemoFontSize = Math.max(7, Math.round(config.fontSize * 0.38));
   const splitPad = Math.max(3, Math.round(config.padding * 0.6));
   const splitGap = Math.max(2, Math.round(config.padding * 0.3));
-  const splitH = splitFontSize + 2 * splitPad;
+  const headlineH = splitFontSize + 2 * splitPad;
   const timerH = config.fontSize + 2 * config.padding;
+  const fontPart = fontfileArg(fontPath);
 
-  // The split sits below the timer for top/center anchors and above the
-  // timer for bottom anchors — matches renderSplitDisplay() on the web.
+  // Always render the split badge directly below the timer to match the
+  // mobile preview (StopwatchOverlay.getSplitBadgePixelStyle).
   let splitYExpr: string;
   switch (config.anchor) {
     case "top-left":
     case "top-center":
     case "top-right":
+      // Timer top = h*position.y, timer bottom = top + timerH.
       splitYExpr = `(h*${config.position.y}+${timerH + splitGap})`;
       break;
     case "center":
@@ -157,17 +240,17 @@ function buildPassedSplitFilters(
     case "bottom-center":
     case "bottom-right":
     default:
-      // Timer's top = (h*position.y) - timerH. Split sits ABOVE the timer.
-      splitYExpr = `(h*${config.position.y}-${timerH + splitGap + splitH})`;
+      // Timer bottom = h*position.y. Split sits BELOW the timer.
+      splitYExpr = `(h*${config.position.y}+${splitGap})`;
       break;
   }
 
-  return visible.map((s, i) => {
+  const filters: string[] = [];
+
+  visible.forEach((s, i) => {
     const startT = (startSignalTime + s.time).toFixed(3);
     const naturalEnd = startSignalTime + s.time + SPLIT_DISPLAY_DURATION_SECONDS;
     const next = visible[i + 1];
-    // Truncate the window when the next split lands so the latest split wins,
-    // matching the web's "loop backwards and pick the most recent" behavior.
     const supersededAt = next ? startSignalTime + next.time : Infinity;
     const summaryAt = finishTime !== null
       ? startSignalTime + finishTime + SUMMARY_DELAY_SECONDS
@@ -179,9 +262,10 @@ function buildPassedSplitFilters(
     const xExpr = buildPositionX(config);
 
     const distLabel = Number.isInteger(s.distance) ? String(s.distance) : s.distance.toString();
-    const text = `${distLabel}m\\: ${formatSecondsForDrawtext(s.time)}`;
+    const headlineText = `${distLabel}m\\: ${formatSecondsForDrawtext(s.time)}`;
 
-    const parts = [
+    const headlineParts = [
+      ...(fontPart ? [fontPart] : []),
       `fontsize=${splitFontSize}`,
       `fontcolor=${config.textColor}`,
       `box=1`,
@@ -189,10 +273,50 @@ function buildPassedSplitFilters(
       `boxborderw=${splitPad}`,
       `x=${xExpr}`,
       `y=${splitYExpr}`,
-      `text='${text}'`,
+      `text='${headlineText}'`,
     ];
-    return `drawtext=enable='${enable}':${parts.join(":")}`;
+    filters.push(`drawtext=enable='${enable}':${headlineParts.join(":")}`);
+
+    const trimmedMemo = s.memo?.trim();
+    if (trimmedMemo) {
+      const memoYExpr = appendOffset(splitYExpr, headlineH);
+      const memoParts = [
+        ...(fontPart ? [fontPart] : []),
+        `fontsize=${splitMemoFontSize}`,
+        `fontcolor=${config.textColor}`,
+        `box=1`,
+        `boxcolor=${rgbaToFFmpegColor(config.backgroundColor)}`,
+        `boxborderw=${splitPad}`,
+        `x=${xExpr}`,
+        `y=${memoYExpr}`,
+        `text='${escapeDrawtextText(trimmedMemo)}'`,
+      ];
+      filters.push(`drawtext=enable='${enable}':${memoParts.join(":")}`);
+    }
   });
+
+  return filters;
+}
+
+/** Append a positive pixel offset to a `(... +N)` style y-expression. */
+function appendOffset(yExpr: string, addPx: number): string {
+  if (yExpr.endsWith(")")) {
+    return `${yExpr.slice(0, -1)}+${addPx})`;
+  }
+  return `${yExpr}+${addPx}`;
+}
+
+/**
+ * Escape user-provided text for FFmpeg `drawtext text=` inside single quotes.
+ * Strips characters that have unpredictable meaning in FFmpeg expressions to
+ * avoid silent corruption of the filter graph.
+ */
+function escapeDrawtextText(s: string): string {
+  return s
+    .replace(/\\/g, "")
+    .replace(/'/g, "’")
+    .replace(/:/g, "\\:")
+    .replace(/%/g, "\\%");
 }
 
 /**
@@ -226,14 +350,58 @@ async function getWatermarkIconUri(): Promise<string | null> {
   }
 }
 
+interface ResolvedFonts {
+  sansBold: string | null;
+  monoBold: string | null;
+}
+
+/**
+ * Resolve the bundled stopwatch fonts to local file URIs. FFmpeg drawtext
+ * needs a `fontfile=` path; without it, the output font is platform-default
+ * (different from the preview).
+ */
+async function resolveStopwatchFonts(): Promise<ResolvedFonts> {
+  try {
+    const { Asset } = require("expo-asset") as typeof import("expo-asset");
+    const sansAsset = Asset.fromModule(require("../../assets/fonts/NotoSans-Bold.ttf"));
+    const monoAsset = Asset.fromModule(require("../../assets/fonts/NotoSansMono-Bold.ttf"));
+    await Promise.all([sansAsset.downloadAsync(), monoAsset.downloadAsync()]);
+    return {
+      sansBold: sansAsset.localUri ?? null,
+      monoBold: monoAsset.localUri ?? null,
+    };
+  } catch {
+    return { sansBold: null, monoBold: null };
+  }
+}
+
+function pickFont(
+  fonts: ResolvedFonts,
+  family: StopwatchConfig["fontFamily"],
+): string | null {
+  if (family === "monospace") return fonts.monoBold ?? fonts.sansBold;
+  return fonts.sansBold ?? fonts.monoBold;
+}
+
+/** Build a `fontfile=...` fragment, or an empty string when no font resolved. */
+function fontfileArg(path: string | null): string {
+  if (!path) return "";
+  // expo-asset returns file:// URIs; FFmpeg's drawtext expects a filesystem
+  // path. Strip the scheme.
+  const fsPath = path.startsWith("file://") ? path.slice("file://".length) : path;
+  return `fontfile=${fsPath}`;
+}
+
 /** Watermark font size for a given video height. */
 function watermarkFontSize(videoHeight: number): number {
   return Math.max(16, Math.round(videoHeight * 0.06));
 }
 
-function buildWatermarkFilter(videoHeight: number): string {
+function buildWatermarkFilter(videoHeight: number, fontPath: string | null): string {
   const fontSize = watermarkFontSize(videoHeight);
+  const fontPart = fontfileArg(fontPath);
   const parts = [
+    ...(fontPart ? [fontPart] : []),
     `fontsize=${fontSize}`,
     `fontcolor=white@0.30`,
     `x=w-tw-w*0.03`,
@@ -409,12 +577,28 @@ export async function exportVideoWithStopwatch(
   const iconUri = showWatermark ? await getWatermarkIconUri() : null;
   const crf = exportSettings.resolution === "original" ? "18" : "23";
 
+  const audioCodec = await detectAudioCodec(videoUri);
+  const audioArgs = buildAudioArgs(audioCodec);
+
+  const hwEncoder = getHwEncoder();
+  const videoArgs = buildVideoEncoderArgs(hwEncoder, exportSettings.resolution, crf);
+
+  const fonts = await resolveStopwatchFonts();
+  const timerFont = pickFont(fonts, scaledConfig.fontFamily);
+
   // filter_complex handles the scale via scalePrefix inside buildFilterComplex ([0:v] stream).
   // Pass plain draw filters (stopwatch + watermark) without a leading scale here.
   const drawFiltersForFC = [
-    ...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime),
-    ...buildPassedSplitFilters(startSignalTime, scaledConfig, finishTime, splitTimes, raceDistance),
-    ...(showWatermark ? [buildWatermarkFilter(watermarkHeight)] : []),
+    ...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime, timerFont),
+    ...buildPassedSplitFilters(
+      startSignalTime,
+      scaledConfig,
+      finishTime,
+      splitTimes,
+      raceDistance,
+      timerFont,
+    ),
+    ...(showWatermark ? [buildWatermarkFilter(watermarkHeight, fonts.sansBold)] : []),
   ];
 
   const fcResult = buildFilterComplex({
@@ -427,29 +611,61 @@ export async function exportVideoWithStopwatch(
     resolution: exportSettings.resolution,
   });
 
-  let command: string;
-
-  if (fcResult) {
-    const inputPart = fcResult.inputArgs.map((p) => `-i "${p}"`).join(" ");
-    command = `-y -i "${videoUri}" ${inputPart} -filter_complex "${fcResult.filterComplex}" -map "${fcResult.outputLabel}" -map 0:a? -c:v libx264 -preset medium -crf ${crf} -c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
-  } else {
+  function buildCommand(decodeArgs: string, vArgs: string, aArgs: string): string {
+    const decodePrefix = decodeArgs ? `${decodeArgs} ` : "";
+    if (fcResult) {
+      const inputPart = fcResult.inputArgs.map((p) => `-i "${p}"`).join(" ");
+      return `-y ${decodePrefix}-i "${videoUri}" ${inputPart} -filter_complex "${fcResult.filterComplex}" -map "${fcResult.outputLabel}" -map 0:a? ${vArgs} ${aArgs} -movflags +faststart "${outputPath}"`;
+    }
     // No overlay inputs — use simple -vf
     const scaleFilter = exportSettings.resolution !== "original" ? `scale=-2:${exportSettings.resolution},` : "";
-    const vfFilters = [
-      ...buildStopwatchFilters(startSignalTime, scaledConfig, isFinished, finishTime),
-      ...buildPassedSplitFilters(startSignalTime, scaledConfig, finishTime, splitTimes, raceDistance),
-      ...(showWatermark ? [buildWatermarkFilter(watermarkHeight)] : []),
-    ];
-    const filterChain = `${scaleFilter}${vfFilters.join(",")}`;
-    command = `-y -i "${videoUri}" -vf "${filterChain}" -c:v libx264 -preset medium -crf ${crf} -c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
+    const filterChain = `${scaleFilter}${drawFiltersForFC.join(",")}`;
+    return `-y ${decodePrefix}-i "${videoUri}" -vf "${filterChain}" ${vArgs} ${aArgs} -movflags +faststart "${outputPath}"`;
   }
 
+  const decodeArgs = buildHwDecodeArgs(hwEncoder !== null);
+  const command = buildCommand(decodeArgs, videoArgs, audioArgs);
   const session = await FFmpegKit.execute(command);
   const returnCode = await session.getReturnCode();
 
-  if (!ReturnCode.isSuccess(returnCode)) {
+  // HW → SW fallback: retry with libx264 only on encoder/decoder-related errors.
+  if (!ReturnCode.isSuccess(returnCode) && hwEncoder !== null) {
     const logs = await session.getLogsAsString();
+    const encoderName = hwEncoder; // "h264_videotoolbox" | "h264_mediacodec"
+    const hwBaseName = encoderName.replace(/^h264_/, ""); // "videotoolbox" | "mediacodec"
+    const isHwError = new RegExp(
+      [
+        // Encoder failures
+        `Unknown encoder '${encoderName}'`,
+        `Encoder ${encoderName} not found`,
+        `Cannot load ${encoderName}`,
+        `Error initializing the ${encoderName}`,
+        // HW decode/encode runtime errors (anchor on error verbs after the log prefix)
+        `\\[${hwBaseName} @[^\\]]*\\][^\\n]*(failed|error|cannot|unsupported|invalid)`,
+        // Hwaccel initialization/transfer failures (specific phrases only)
+        `Failed setup for format ${hwBaseName}`,
+        `Failed to initialise hwaccel`,
+        `Failed to initialize hwaccel`,
+        `hwaccel.*(failed|not found|init failed|transfer.*failed)`,
+      ].join("|"),
+      "i"
+    ).test(logs);
+    if (isHwError) {
+      onProgress(0);
+      const fallbackVideoArgs = buildVideoEncoderArgs(null, exportSettings.resolution, crf);
+      const fallbackCommand = buildCommand("", fallbackVideoArgs, audioArgs);
+      const fallbackSession = await FFmpegKit.execute(fallbackCommand);
+      const fallbackRc = await fallbackSession.getReturnCode();
+      if (!ReturnCode.isSuccess(fallbackRc)) {
+        throw new Error(`FFmpeg export failed (fallback): ${await fallbackSession.getLogsAsString()}`);
+      }
+      return outputPath;
+    }
     throw new Error(`FFmpeg export failed: ${logs}`);
+  }
+
+  if (!ReturnCode.isSuccess(returnCode)) {
+    throw new Error(`FFmpeg export failed: ${await session.getLogsAsString()}`);
   }
 
   return outputPath;

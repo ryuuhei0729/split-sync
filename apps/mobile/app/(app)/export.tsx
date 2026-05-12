@@ -74,6 +74,7 @@ export default function ExportScreen() {
   // --- Summary PNG capture ref & URI ---
   const summaryViewRef = useRef<View>(null);
   const [capturedSummaryUri, setCapturedSummaryUri] = useState<string | null>(null);
+  const summaryReadyRef = useRef(false);
 
   // --- Derived ---
   const exportComplete = outputPath !== null;
@@ -164,6 +165,33 @@ export default function ExportScreen() {
     }
   }, [effectivePlan]);
 
+  // Pre-capture the summary PNG once the off-screen view has had time to lay
+  // out. Doing this on a delayed mount tick (rather than at handleExport
+  // time) avoids the race where the captured bitmap can be empty because the
+  // view's first commit hadn't reached the native renderer yet.
+  useEffect(() => {
+    if (!isFinished || finishTime === null) return;
+    if (summaryReadyRef.current) return;
+    const handle = setTimeout(() => {
+      const captureRef = getCaptureRef();
+      if (!captureRef || !summaryViewRef.current) return;
+      captureRef(summaryViewRef, {
+        format: "png",
+        quality: 1.0,
+        width: videoWidth,
+        height: videoHeight,
+      })
+        .then((uri) => {
+          summaryReadyRef.current = true;
+          setCapturedSummaryUri(uri);
+        })
+        .catch(() => {
+          // Leave summaryReadyRef false so handleExport will try again.
+        });
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [isFinished, finishTime, videoWidth, videoHeight]);
+
   const handleExport = useCallback(async () => {
     if (!videoUri || startTime === null) {
       Alert.alert(t("common.error"), t("exportScreen.needVideoAndStart"));
@@ -203,8 +231,16 @@ export default function ExportScreen() {
     }
 
     // --- Capture summary PNG (only when finished) ---
-    let summaryImageUri: string | null = null;
-    if (isFinished && finishTime !== null && summaryViewRef.current) {
+    // If pre-capture (on mount) already produced a URI, reuse it. Otherwise
+    // capture now. Pre-capture avoids the race where the off-screen view
+    // hadn't fully rendered by the time the user pressed the export button.
+    let summaryImageUri: string | null = capturedSummaryUri;
+    if (
+      !summaryImageUri &&
+      isFinished &&
+      finishTime !== null &&
+      summaryViewRef.current
+    ) {
       try {
         const captureRef = getCaptureRef();
         if (captureRef) {
@@ -272,6 +308,7 @@ export default function ExportScreen() {
     videoHeight,
     splitTimes,
     raceDistance,
+    capturedSummaryUri,
     t,
   ]);
 

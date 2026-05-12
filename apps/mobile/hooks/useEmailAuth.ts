@@ -39,7 +39,7 @@ export function useEmailAuth() {
       try {
         setLoading(true);
         setError(null);
-        const { error: authError } = await supabase.auth.signUp({
+        const { data, error: authError } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -48,6 +48,13 @@ export function useEmailAuth() {
         });
         if (authError) {
           setError(localizeAuthError(authError.message, t));
+          return false;
+        }
+        // Supabase は Confirm Email 有効時、登録済みメールでも error を返さず
+        // identities が空配列の user を返す（メール列挙対策のデフォルト挙動）。
+        // 確認メールも実際には送信されないため、明示的にエラーへ変換する。
+        if (data?.user && (data.user.identities?.length ?? 0) === 0) {
+          setError(localizeAuthError("User already registered", t));
           return false;
         }
         return true;

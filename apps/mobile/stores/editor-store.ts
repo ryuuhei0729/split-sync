@@ -6,7 +6,21 @@ import type {
   VideoMetadata,
   ExportSettings,
 } from "@swimhub-timer/shared";
-import { DEFAULT_STOPWATCH_CONFIG } from "@swimhub-timer/shared";
+import { STOPWATCH_PRESETS } from "@swimhub-timer/shared";
+
+const MOBILE_BASE_PRESET =
+  STOPWATCH_PRESETS.find((p) => p.id === "minimal-white") ?? STOPWATCH_PRESETS[0];
+
+// Mobile is locked to the minimal-white preset, but with a slightly darker
+// backdrop so the timer reads cleanly over light pool footage.
+// borderRadius is 0 so the preview matches the FFmpeg drawtext box, which is
+// always square — fixing the rounded-vs-square mismatch.
+export const MOBILE_DEFAULT_STOPWATCH_CONFIG: StopwatchConfig = {
+  ...MOBILE_BASE_PRESET.config,
+  backgroundColor: "rgba(0,0,0,0.6)",
+  anchor: "bottom-left",
+  borderRadius: 0,
+};
 
 interface AudioData {
   pcmData: Float32Array;
@@ -80,7 +94,7 @@ const initialState = {
   detectedSignalTime: null as number | null,
   startTime: null as number | null,
   isDetecting: false,
-  stopwatchConfig: { ...DEFAULT_STOPWATCH_CONFIG },
+  stopwatchConfig: { ...MOBILE_DEFAULT_STOPWATCH_CONFIG },
   exportSettings: { resolution: "1080" as const },
   exportProgress: 0,
   isExporting: false,

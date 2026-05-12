@@ -1,5 +1,5 @@
 import type { StopwatchConfig } from "@swimhub-timer/shared";
-import { DEFAULT_STOPWATCH_CONFIG } from "@swimhub-timer/shared";
+import { MOBILE_DEFAULT_STOPWATCH_CONFIG } from "../stores/editor-store";
 
 function getStorage() {
   try {
@@ -62,16 +62,16 @@ export function saveStopwatchConfig(config: StopwatchConfig): void {
 
 export function loadStopwatchConfig(): StopwatchConfig {
   const s = storage();
-  if (!s) return { ...DEFAULT_STOPWATCH_CONFIG };
+  if (!s) return { ...MOBILE_DEFAULT_STOPWATCH_CONFIG };
 
   migrateFromLegacyStorage();
 
   const json = s.getString(KEYS.STOPWATCH_CONFIG);
-  if (!json) return { ...DEFAULT_STOPWATCH_CONFIG };
+  if (!json) return { ...MOBILE_DEFAULT_STOPWATCH_CONFIG };
 
   try {
-    return { ...DEFAULT_STOPWATCH_CONFIG, ...JSON.parse(json) };
+    return { ...MOBILE_DEFAULT_STOPWATCH_CONFIG, ...JSON.parse(json) };
   } catch {
-    return { ...DEFAULT_STOPWATCH_CONFIG };
+    return { ...MOBILE_DEFAULT_STOPWATCH_CONFIG };
   }
 }

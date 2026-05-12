@@ -1,8 +1,9 @@
-import { useRef, useMemo, useCallback, useEffect } from "react";
+import { useRef, useMemo, useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   Image,
+  Pressable,
   StyleSheet,
   PanResponder,
   type LayoutChangeEvent,
@@ -10,8 +11,9 @@ import {
   type DimensionValue,
   type FlexAlignType,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useEditorStore } from "../../stores/editor-store";
-import { formatTime } from "@swimhub-timer/shared";
+import { formatTime, STOPWATCH_FONT_SIZE_MIN } from "@swimhub-timer/shared";
 import type { StopwatchAnchor } from "@swimhub-timer/shared";
 import { FinishSummaryTable } from "../splits/FinishSummaryTable";
 
@@ -21,6 +23,12 @@ interface Props {
 }
 
 export const SPLIT_DISPLAY_DURATION_SECONDS = 3;
+
+const TIMER_EDIT_BORDER_COLOR = "#3B82F6";
+const TIMER_EDIT_BORDER_WIDTH = 2;
+const RESIZE_HANDLE_SIZE = 28;
+const TAP_MOVE_THRESHOLD_PX = 6;
+const TAP_MAX_DURATION_MS = 250;
 
 export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   const config = useEditorStore((s) => s.stopwatchConfig);
@@ -32,9 +40,36 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   const raceDistance = useEditorStore((s) => s.raceDistance);
   const updateStopwatchConfig = useEditorStore((s) => s.updateStopwatchConfig);
 
+  // Tracking content rect in state (not just a ref) so the wrapper can be
+  // positioned in absolute pixels — percentage-based transforms didn't apply
+  // reliably on first paint, leaving the timer clipped at the top-left.
+  const [contentRect, setContentRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [timerLayout, setTimerLayout] = useState<{ width: number; height: number } | null>(null);
+  const [summaryLayout, setSummaryLayout] = useState<{ width: number; height: number } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [summaryEditing, setSummaryEditing] = useState(false);
+
   const containerSize = useRef({ width: 0, height: 0 });
-  const contentRect = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
+  const gestureRefs = useRef({
+    contentRect,
+    scaleFactor: 0,
+    editing,
+    summaryEditing,
+  });
+  gestureRefs.current.contentRect = contentRect;
+  gestureRefs.current.editing = editing;
+  gestureRefs.current.summaryEditing = summaryEditing;
+
   const timerDragStart = useRef({ x: 0, y: 0 });
+  const timerDidMove = useRef(false);
+  const timerGrantTime = useRef(0);
+  const resizeStartFontSize = useRef(0);
+  const summaryDidMove = useRef(false);
+  const summaryGrantTime = useRef(0);
+  const resizeStartSummaryScale = useRef(1);
+  const initialCenterApplied = useRef(false);
+
   const summaryGesture = useRef<{
     mode: "pan" | "pinch";
     posStart: { x: number; y: number };
@@ -49,8 +84,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
     panAnchor: { pageX: 0, pageY: 0 },
   });
 
-  const SUMMARY_SCALE_MIN = 0.4;
-  const SUMMARY_SCALE_MAX = 3;
+  const SUMMARY_SCALE_MIN = 0.1;
 
   const updateContentRect = useCallback(() => {
     const cw = containerSize.current.width;
@@ -60,15 +94,29 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
     const containerAspect = cw / ch;
     const videoAspect = videoWidth / videoHeight;
 
-    if (videoAspect > containerAspect) {
-      const contentW = cw;
-      const contentH = cw / videoAspect;
-      contentRect.current = { x: 0, y: (ch - contentH) / 2, width: contentW, height: contentH };
-    } else {
-      const contentH = ch;
-      const contentW = ch * videoAspect;
-      contentRect.current = { x: (cw - contentW) / 2, y: 0, width: contentW, height: contentH };
-    }
+    const next =
+      videoAspect > containerAspect
+        ? {
+            x: 0,
+            y: (ch - cw / videoAspect) / 2,
+            width: cw,
+            height: cw / videoAspect,
+          }
+        : {
+            x: (cw - ch * videoAspect) / 2,
+            y: 0,
+            width: ch * videoAspect,
+            height: ch,
+          };
+
+    setContentRect((prev) =>
+      prev.x === next.x &&
+      prev.y === next.y &&
+      prev.width === next.width &&
+      prev.height === next.height
+        ? prev
+        : next,
+    );
   }, [videoWidth, videoHeight]);
 
   const timerPanResponder = useMemo(
@@ -79,20 +127,70 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
         onPanResponderGrant: () => {
           const pos = useEditorStore.getState().stopwatchConfig.position;
           timerDragStart.current = { x: pos.x, y: pos.y };
+          timerDidMove.current = false;
+          timerGrantTime.current = Date.now();
         },
         onPanResponderMove: (_, gestureState) => {
-          const { width, height } = contentRect.current;
-          if (width === 0 || height === 0) return;
+          if (
+            Math.abs(gestureState.dx) > TAP_MOVE_THRESHOLD_PX ||
+            Math.abs(gestureState.dy) > TAP_MOVE_THRESHOLD_PX
+          ) {
+            timerDidMove.current = true;
+          }
+          if (!gestureRefs.current.editing || !timerDidMove.current) return;
 
-          const dx = gestureState.dx / width;
-          const dy = gestureState.dy / height;
+          const cr = gestureRefs.current.contentRect;
+          if (cr.width === 0 || cr.height === 0) return;
+
+          const dx = gestureState.dx / cr.width;
+          const dy = gestureState.dy / cr.height;
 
           const newX = Math.max(0, Math.min(1, timerDragStart.current.x + dx));
           const newY = Math.max(0, Math.min(1, timerDragStart.current.y + dy));
 
-          updateStopwatchConfig({
-            position: { x: newX, y: newY },
-          });
+          updateStopwatchConfig({ position: { x: newX, y: newY } });
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const elapsed = Date.now() - timerGrantTime.current;
+          const moved =
+            timerDidMove.current ||
+            Math.abs(gestureState.dx) > TAP_MOVE_THRESHOLD_PX ||
+            Math.abs(gestureState.dy) > TAP_MOVE_THRESHOLD_PX;
+          if (!moved && elapsed < TAP_MAX_DURATION_MS) {
+            setEditing((prev) => !prev);
+          }
+        },
+      }),
+    [updateStopwatchConfig],
+  );
+
+  // The handle uses capture-phase shouldSet so the parent timer responder
+  // can't claim the gesture first. This matters because the handle is a
+  // descendant of the timerPanResponder's view.
+  const resizePanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          resizeStartFontSize.current =
+            useEditorStore.getState().stopwatchConfig.fontSize;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          // Up-right drag enlarges; down-left shrinks. Convert screen-pixel
+          // drag to video-resolution font size using the current scale factor
+          // so the gesture feels 1:1 with the rendered timer. No upper cap —
+          // the timer can grow as large as the user wants.
+          const sf = gestureRefs.current.scaleFactor || 0.2;
+          const deltaScreenPx = gestureState.dx - gestureState.dy;
+          const newSize = Math.max(
+            STOPWATCH_FONT_SIZE_MIN,
+            resizeStartFontSize.current + deltaScreenPx / sf,
+          );
+          updateStopwatchConfig({ fontSize: Math.round(newSize) });
         },
       }),
     [updateStopwatchConfig],
@@ -102,13 +200,13 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
         onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (e) => {
           const cfg = useEditorStore.getState().stopwatchConfig;
           const touches = e.nativeEvent.touches;
+          summaryDidMove.current = false;
+          summaryGrantTime.current = Date.now();
           if (touches.length >= 2) {
             const dx = touches[0].pageX - touches[1].pageX;
             const dy = touches[0].pageY - touches[1].pageY;
@@ -130,18 +228,26 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
             };
           }
         },
-        onPanResponderMove: (e) => {
+        onPanResponderMove: (e, gestureState) => {
+          if (
+            Math.abs(gestureState.dx) > TAP_MOVE_THRESHOLD_PX ||
+            Math.abs(gestureState.dy) > TAP_MOVE_THRESHOLD_PX
+          ) {
+            summaryDidMove.current = true;
+          }
+
           const touches = e.nativeEvent.touches;
           const cfg = useEditorStore.getState().stopwatchConfig;
           const g = summaryGesture.current;
 
           if (touches.length >= 2) {
+            // Pinch still works regardless of edit mode (multi-touch is an
+            // explicit resize gesture).
             const dx = touches[0].pageX - touches[1].pageX;
             const dy = touches[0].pageY - touches[1].pageY;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
             if (g.mode !== "pinch" || g.pinchDistanceStart <= 0) {
-              // Enter (or restart) pinch with the current finger spread as baseline.
               summaryGesture.current = {
                 mode: "pinch",
                 posStart: { x: cfg.summaryPosition.x, y: cfg.summaryPosition.y },
@@ -153,15 +259,11 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
             }
 
             const ratio = dist / g.pinchDistanceStart;
-            const newScale = Math.max(
-              SUMMARY_SCALE_MIN,
-              Math.min(SUMMARY_SCALE_MAX, g.scaleStart * ratio),
-            );
+            const newScale = Math.max(SUMMARY_SCALE_MIN, g.scaleStart * ratio);
             updateStopwatchConfig({ summaryScale: newScale });
             return;
           }
 
-          // 1-finger pan. Reset the baseline if we just dropped from pinch.
           if (g.mode !== "pan") {
             const t0 = touches[0] ?? { pageX: g.panAnchor.pageX, pageY: g.panAnchor.pageY };
             summaryGesture.current = {
@@ -174,20 +276,59 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
             return;
           }
 
-          const { width, height } = contentRect.current;
-          if (width === 0 || height === 0) return;
+          if (!gestureRefs.current.summaryEditing || !summaryDidMove.current) return;
+
+          const cr = gestureRefs.current.contentRect;
+          if (cr.width === 0 || cr.height === 0) return;
 
           const t0 = touches[0];
           if (!t0) return;
           const dxPx = t0.pageX - g.panAnchor.pageX;
           const dyPx = t0.pageY - g.panAnchor.pageY;
 
-          const newX = Math.max(0, Math.min(1, g.posStart.x + dxPx / width));
-          const newY = Math.max(0, Math.min(1, g.posStart.y + dyPx / height));
+          const newX = Math.max(0, Math.min(1, g.posStart.x + dxPx / cr.width));
+          const newY = Math.max(0, Math.min(1, g.posStart.y + dyPx / cr.height));
 
           updateStopwatchConfig({
             summaryPosition: { x: newX, y: newY },
           });
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const elapsed = Date.now() - summaryGrantTime.current;
+          const moved =
+            summaryDidMove.current ||
+            Math.abs(gestureState.dx) > TAP_MOVE_THRESHOLD_PX ||
+            Math.abs(gestureState.dy) > TAP_MOVE_THRESHOLD_PX;
+          if (!moved && elapsed < TAP_MAX_DURATION_MS) {
+            setSummaryEditing((prev) => !prev);
+          }
+        },
+      }),
+    [updateStopwatchConfig],
+  );
+
+  // Resize handle for the summary — mirrors the timer's resize behaviour.
+  const summaryResizePanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          resizeStartSummaryScale.current =
+            useEditorStore.getState().stopwatchConfig.summaryScale;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          // Up-right enlarges; down-left shrinks. ~200px drag traverses a full
+          // unit of scale, regardless of current size.
+          const deltaScreenPx = gestureState.dx - gestureState.dy;
+          const newScale = Math.max(
+            SUMMARY_SCALE_MIN,
+            resizeStartSummaryScale.current + deltaScreenPx / 200,
+          );
+          updateStopwatchConfig({ summaryScale: newScale });
         },
       }),
     [updateStopwatchConfig],
@@ -208,12 +349,40 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
     [updateContentRect],
   );
 
+  const onTimerLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setTimerLayout((prev) =>
+      prev && prev.width === width && prev.height === height ? prev : { width, height },
+    );
+  }, []);
+
+  const onSummaryLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSummaryLayout((prev) =>
+      prev && prev.width === width && prev.height === height ? prev : { width, height },
+    );
+  }, []);
+
+  // Re-center the timer the first time both the content rect and the timer
+  // have been measured, but only if the user has not already moved it.
+  useEffect(() => {
+    if (initialCenterApplied.current) return;
+    if (contentRect.width === 0 || contentRect.height === 0) return;
+    if (!timerLayout) return;
+
+    const pos = useEditorStore.getState().stopwatchConfig.position;
+    const isAtDefault = Math.abs(pos.x - 0.5) < 1e-6 && Math.abs(pos.y - 0.5) < 1e-6;
+    initialCenterApplied.current = true;
+    if (!isAtDefault) return;
+
+    const newX = Math.max(0, 0.5 - timerLayout.width / (2 * contentRect.width));
+    const newY = Math.min(1, 0.5 + timerLayout.height / (2 * contentRect.height));
+    updateStopwatchConfig({ position: { x: newX, y: newY } });
+  }, [contentRect, timerLayout, updateStopwatchConfig]);
+
   const elapsedRaw =
     startTime !== null ? Math.max(0, currentVideoTime - startTime) : 0;
 
-  // Match the web preview: surface only the most-recently passed split, for
-  // SPLIT_DISPLAY_DURATION seconds after it is passed. Web reference:
-  // apps/web/src/hooks/useCanvasCompositor.ts
   const activeSplit = useMemo(() => {
     if (startTime === null) return null;
     const cap = isFinished && finishTime !== null ? Math.min(elapsedRaw, finishTime) : elapsedRaw;
@@ -221,8 +390,6 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
     for (let i = sorted.length - 1; i >= 0; i--) {
       const s = sorted[i];
       if (isFinished && finishTime !== null && raceDistance !== null) {
-        // Suppress the auto-added split that mirrors raceDistance/finishTime —
-        // it would just redisplay the timer's final reading.
         if (s.distance === raceDistance && s.time === finishTime) continue;
       }
       if (cap >= s.time && cap < s.time + SPLIT_DISPLAY_DURATION_SECONDS) {
@@ -233,10 +400,20 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   }, [splitTimes, elapsedRaw, isFinished, finishTime, raceDistance, startTime]);
 
   const scaleFactor =
-    contentRect.current.width > 0 && videoWidth > 0 ? contentRect.current.width / videoWidth : 0.2;
+    contentRect.width > 0 && videoWidth > 0 ? contentRect.width / videoWidth : 0.2;
+  gestureRefs.current.scaleFactor = scaleFactor;
   const watermarkFontSize = Math.max(8, Math.round(videoHeight * 0.06 * scaleFactor));
 
   if (startTime === null) return null;
+  if (contentRect.width === 0 || contentRect.height === 0) {
+    return (
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents="box-none"
+        onLayout={onContainerLayout}
+      />
+    );
+  }
 
   const elapsed = isFinished && finishTime !== null ? Math.min(elapsedRaw, finishTime) : elapsedRaw;
   const timeText = formatTime(elapsed);
@@ -245,43 +422,83 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   const scaledPadding = config.padding * scaleFactor;
   const scaledRadius = config.borderRadius * scaleFactor;
 
-  const timerWrapperStyle = getWrapperStyle(config.position, config.anchor);
-  const summaryWrapperStyle = getWrapperStyle(config.summaryPosition, config.summaryAnchor);
-  const cr = contentRect.current;
+  const timerWrapperStyle = getTimerWrapperPixelStyle(
+    config.position,
+    config.anchor,
+    contentRect.width,
+    contentRect.height,
+  );
+  // Use measured-pixel positioning for the summary so its hit area lines up
+  // with what's actually rendered. The percentage-based transform variant
+  // (translateX/Y of -50%) leaves React Native's hit-testing pointing at the
+  // pre-transform rect, so the resize handle at the visible top-right never
+  // receives the touch.
+  const summaryWrapperStyle = getMeasuredWrapperStyle(
+    config.summaryPosition,
+    config.summaryAnchor,
+    contentRect.width,
+    contentRect.height,
+    summaryLayout,
+  );
 
   const showSummary =
     isFinished &&
     finishTime !== null &&
     currentVideoTime - startTime >= finishTime;
 
-  // Mirror the web split-display sizing (renderer.ts: splitFontSize ~ fontSize*0.55,
-  // memo ~ fontSize*0.38, padding ~ padding*0.6).
   const splitFontSize = Math.max(8, Math.round(scaledFontSize * 0.55));
   const splitMemoFontSize = Math.max(7, Math.round(scaledFontSize * 0.38));
   const splitPadding = Math.max(3, Math.round(scaledPadding * 0.6));
   const splitGap = Math.max(2, Math.round(scaledPadding * 0.3));
-  const splitRadius = Math.max(2, Math.round(scaledRadius * 0.6));
+  const splitRadius = Math.max(0, Math.round(scaledRadius * 0.6));
   const stackAlign = anchorAlignItems(config.anchor);
-  const splitHorizontalStyle: ViewStyle =
-    stackAlign === "flex-end"
-      ? { right: 0 }
-      : stackAlign === "center"
-        ? { left: 0, right: 0, alignItems: "center" }
-        : { left: 0 };
+
+  // Padding so the resize handle lands inside the parent's hit-test bounds
+  // (touches outside parent bounds aren't delivered to children on either
+  // platform). Half the handle is allowed to overlap the inner box so the
+  // handle visually anchors closer to the digits.
+  const HANDLE_OVERLAP_PAD = Math.round(RESIZE_HANDLE_SIZE / 2);
+  const handlePadTop = editing ? HANDLE_OVERLAP_PAD : 0;
+  const handlePadRight = editing ? HANDLE_OVERLAP_PAD : 0;
+  const summaryHandlePadTop = summaryEditing ? HANDLE_OVERLAP_PAD : 0;
+  const summaryHandlePadRight = summaryEditing ? HANDLE_OVERLAP_PAD : 0;
+
+  const splitBadgeStyle = getSplitBadgePixelStyle(
+    config.position,
+    config.anchor,
+    contentRect.width,
+    contentRect.height,
+    timerLayout,
+    splitGap,
+  );
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={onContainerLayout}>
       <View
         style={{
           position: "absolute",
-          left: cr.x,
-          top: cr.y,
-          width: cr.width,
-          height: cr.height,
+          left: contentRect.x,
+          top: contentRect.y,
+          width: contentRect.width,
+          height: contentRect.height,
         }}
         pointerEvents="box-none"
       >
-        {/* Watermark: bottom-right corner of video content */}
+        {/* Outside-tap dismiss for edit modes. Rendered before the timer/
+            summary so taps that land on the timer/handle still hit those
+            views first (deepest-child wins on the bubble phase). Only mounted
+            while a mode is active so play/pause continues to work otherwise. */}
+        {(editing || summaryEditing) && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setEditing(false);
+              setSummaryEditing(false);
+            }}
+          />
+        )}
+
+        {/* Watermark */}
         <View
           style={{
             position: "absolute",
@@ -306,37 +523,41 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
             style={{
               color: "white",
               fontSize: watermarkFontSize,
-              fontWeight: "600",
+              fontFamily: "NotoSans-Bold",
             }}
           >
             SwimHub Timer
           </Text>
         </View>
 
-        {/* Stopwatch timer — hidden while the summary is shown.
-            The split badge is absolutely positioned below the timer so the
-            timer's top edge stays fixed when a split appears (preview only;
-            the export pipeline anchors the split independently). */}
         {!showSummary && (
           <View style={timerWrapperStyle} pointerEvents="box-none">
             <View
               {...timerPanResponder.panHandlers}
               style={{ alignItems: stackAlign }}
             >
-              <View>
+              <View
+                onLayout={onTimerLayout}
+                style={{
+                  paddingTop: handlePadTop,
+                  paddingRight: handlePadRight,
+                }}
+              >
                 <View
                   style={{
                     backgroundColor: config.backgroundColor,
                     borderRadius: scaledRadius,
                     padding: scaledPadding,
+                    borderWidth: editing ? TIMER_EDIT_BORDER_WIDTH : 0,
+                    borderColor: editing ? TIMER_EDIT_BORDER_COLOR : "transparent",
                   }}
                 >
                   <Text
                     style={{
                       color: config.textColor,
                       fontSize: scaledFontSize,
-                      fontWeight: "700",
-                      fontFamily: config.fontFamily === "monospace" ? "monospace" : undefined,
+                      fontFamily:
+                        config.fontFamily === "monospace" ? "NotoSansMono-Bold" : "NotoSans-Bold",
                       fontVariant: ["tabular-nums"],
                     }}
                   >
@@ -344,23 +565,13 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
                   </Text>
                 </View>
 
-                {activeSplit && (
+                {editing && (
                   <View
-                    style={{
-                      position: "absolute",
-                      top: "100%",
-                      marginTop: splitGap,
-                      ...splitHorizontalStyle,
-                    }}
+                    {...resizePanResponder.panHandlers}
+                    style={styles.resizeHandle}
+                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                   >
-                    <SplitBadge
-                      split={activeSplit}
-                      config={config}
-                      fontSize={splitFontSize}
-                      memoFontSize={splitMemoFontSize}
-                      padding={splitPadding}
-                      radius={splitRadius}
-                    />
+                    <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
                   </View>
                 )}
               </View>
@@ -368,21 +579,65 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
           </View>
         )}
 
-        {/* Goal summary table — appears at finish; draggable + pinch-to-resize */}
+        {/* Active split badge — rendered as an absolute sibling of the timer
+            wrapper so its width is sized to its own content rather than being
+            constrained (and word-wrapped) by the timer text width. */}
+        {!showSummary && activeSplit && splitBadgeStyle && (
+          <View style={splitBadgeStyle} pointerEvents="none">
+            <SplitBadge
+              split={activeSplit}
+              config={config}
+              fontSize={splitFontSize}
+              memoFontSize={splitMemoFontSize}
+              padding={splitPadding}
+              radius={splitRadius}
+            />
+          </View>
+        )}
+
         {showSummary && (
-          <View style={summaryWrapperStyle} pointerEvents="box-none" testID="finish-summary-table">
+          <View
+            style={summaryWrapperStyle}
+            pointerEvents="box-none"
+            testID="finish-summary-table"
+            onLayout={onSummaryLayout}
+          >
             <View {...summaryPanResponder.panHandlers}>
-              <FinishSummaryTable
-                splitTimes={splitTimes}
-                finishTime={finishTime!}
-                config={{
-                  textColor: config.textColor,
-                  backgroundColor: config.backgroundColor,
-                  fontFamily: config.fontFamily,
+              <View
+                style={{
+                  paddingTop: summaryHandlePadTop,
+                  paddingRight: summaryHandlePadRight,
                 }}
-                scaleFactor={scaleFactor * config.summaryScale}
-                raceDistance={raceDistance}
-              />
+              >
+                <View
+                  style={{
+                    borderWidth: summaryEditing ? TIMER_EDIT_BORDER_WIDTH : 0,
+                    borderColor: summaryEditing ? TIMER_EDIT_BORDER_COLOR : "transparent",
+                    borderRadius: 8,
+                  }}
+                >
+                  <FinishSummaryTable
+                    splitTimes={splitTimes}
+                    finishTime={finishTime!}
+                    config={{
+                      textColor: config.textColor,
+                      backgroundColor: config.backgroundColor,
+                      fontFamily: config.fontFamily,
+                    }}
+                    scaleFactor={scaleFactor * config.summaryScale}
+                    raceDistance={raceDistance}
+                  />
+                </View>
+                {summaryEditing && (
+                  <View
+                    {...summaryResizePanResponder.panHandlers}
+                    style={styles.resizeHandle}
+                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  >
+                    <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
+                  </View>
+                )}
+              </View>
             </View>
           </View>
         )}
@@ -438,7 +693,8 @@ function SplitBadge({
     split.lapTime !== null
       ? `${formatDistance(split.distance)}m: ${timeStr} (lap: ${formatTime(split.lapTime)})`
       : `${formatDistance(split.distance)}m: ${timeStr}`;
-  const fontFamily = config.fontFamily === "monospace" ? "monospace" : undefined;
+  const fontFamily =
+    config.fontFamily === "monospace" ? "NotoSansMono-Bold" : "NotoSans-Bold";
 
   return (
     <View
@@ -448,13 +704,14 @@ function SplitBadge({
         padding,
         marginTop,
         marginBottom,
+        alignSelf: "flex-start",
       }}
     >
       <Text
+        numberOfLines={1}
         style={{
           color: config.textColor,
           fontSize,
-          fontWeight: "700",
           fontFamily,
           fontVariant: ["tabular-nums"],
         }}
@@ -463,6 +720,7 @@ function SplitBadge({
       </Text>
       {split.memo ? (
         <Text
+          numberOfLines={1}
           style={{
             color: config.textColor,
             fontSize: memoFontSize,
@@ -478,11 +736,174 @@ function SplitBadge({
   );
 }
 
+const styles = StyleSheet.create({
+  resizeHandle: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: RESIZE_HANDLE_SIZE,
+    height: RESIZE_HANDLE_SIZE,
+    borderRadius: RESIZE_HANDLE_SIZE / 2,
+    backgroundColor: TIMER_EDIT_BORDER_COLOR,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
 export function getStopwatchWrapperStyle(
   position: { x: number; y: number },
   anchor: StopwatchAnchor,
 ): ViewStyle {
   return getWrapperStyle(position, anchor);
+}
+
+// Measured-pixel wrapper. Falls back to the percentage variant on the first
+// frame (before the wrapped view has been measured). Once we know its size we
+// switch to absolute coords so React Native's hit-testing rectangle matches
+// what the user sees — critical for non-bottom-left anchors that otherwise
+// rely on a `transform: translate(-50%, -50%)`.
+function getMeasuredWrapperStyle(
+  position: { x: number; y: number },
+  anchor: StopwatchAnchor,
+  contentWidth: number,
+  contentHeight: number,
+  measured: { width: number; height: number } | null,
+): ViewStyle {
+  if (!measured) {
+    return getTimerWrapperPixelStyle(position, anchor, contentWidth, contentHeight);
+  }
+  const xPx = position.x * contentWidth;
+  const yPx = position.y * contentHeight;
+  const base: ViewStyle = { position: "absolute" };
+  const w = measured.width;
+  const h = measured.height;
+  switch (anchor) {
+    case "top-left":
+      return { ...base, left: xPx, top: yPx };
+    case "top-center":
+      return { ...base, left: xPx - w / 2, top: yPx };
+    case "top-right":
+      return { ...base, left: xPx - w, top: yPx };
+    case "center":
+      return { ...base, left: xPx - w / 2, top: yPx - h / 2 };
+    case "bottom-left":
+      return { ...base, left: xPx, top: yPx - h };
+    case "bottom-center":
+      return { ...base, left: xPx - w / 2, top: yPx - h };
+    case "bottom-right":
+      return { ...base, left: xPx - w, top: yPx - h };
+    default:
+      return { ...base, left: xPx, top: yPx };
+  }
+}
+
+// Pixel-based wrapper for the live timer: avoids the percentage-based
+// transform path, which intermittently failed to apply on first paint and
+// left the timer clipped at the top-left of the screen.
+function getTimerWrapperPixelStyle(
+  position: { x: number; y: number },
+  anchor: StopwatchAnchor,
+  contentWidth: number,
+  contentHeight: number,
+): ViewStyle {
+  const base: ViewStyle = { position: "absolute" };
+  const xPx = position.x * contentWidth;
+  const yPx = position.y * contentHeight;
+
+  switch (anchor) {
+    case "top-left":
+      return { ...base, left: xPx, top: yPx };
+    case "top-center":
+      return { ...base, left: 0, right: 0, top: yPx, flexDirection: "row", justifyContent: "center" };
+    case "top-right":
+      return { ...base, right: contentWidth - xPx, top: yPx };
+    case "bottom-left":
+      return { ...base, left: xPx, bottom: contentHeight - yPx };
+    case "bottom-center":
+      return {
+        ...base,
+        left: 0,
+        right: 0,
+        bottom: contentHeight - yPx,
+        flexDirection: "row",
+        justifyContent: "center",
+      };
+    case "bottom-right":
+      return { ...base, right: contentWidth - xPx, bottom: contentHeight - yPx };
+    case "center":
+      return getWrapperStyle(position, anchor);
+    default:
+      return { ...base, left: xPx, top: yPx };
+  }
+}
+
+// Position the split badge directly below the timer so it can render at
+// content-width rather than being constrained (and wrapped) by the timer's
+// width. For top-anchored configs we need the timer height to know where
+// "below" is — fall back to no badge until the timer has been measured.
+function getSplitBadgePixelStyle(
+  position: { x: number; y: number },
+  anchor: StopwatchAnchor,
+  contentWidth: number,
+  contentHeight: number,
+  timerLayout: { width: number; height: number } | null,
+  splitGap: number,
+): ViewStyle | null {
+  const xPx = position.x * contentWidth;
+  const yPx = position.y * contentHeight;
+  const base: ViewStyle = { position: "absolute" };
+
+  switch (anchor) {
+    case "bottom-left":
+      return { ...base, left: xPx, top: yPx + splitGap };
+    case "bottom-right":
+      return { ...base, right: contentWidth - xPx, top: yPx + splitGap };
+    case "bottom-center":
+      return {
+        ...base,
+        left: 0,
+        right: 0,
+        top: yPx + splitGap,
+        flexDirection: "row",
+        justifyContent: "center",
+      };
+    case "top-left": {
+      if (!timerLayout) return null;
+      return { ...base, left: xPx, top: yPx + timerLayout.height + splitGap };
+    }
+    case "top-right": {
+      if (!timerLayout) return null;
+      return {
+        ...base,
+        right: contentWidth - xPx,
+        top: yPx + timerLayout.height + splitGap,
+      };
+    }
+    case "top-center": {
+      if (!timerLayout) return null;
+      return {
+        ...base,
+        left: 0,
+        right: 0,
+        top: yPx + timerLayout.height + splitGap,
+        flexDirection: "row",
+        justifyContent: "center",
+      };
+    }
+    case "center": {
+      if (!timerLayout) return null;
+      return {
+        ...base,
+        left: 0,
+        right: 0,
+        top: yPx + timerLayout.height / 2 + splitGap,
+        flexDirection: "row",
+        justifyContent: "center",
+      };
+    }
+    default:
+      return { ...base, left: xPx, top: yPx + splitGap };
+  }
 }
 
 function getWrapperStyle(

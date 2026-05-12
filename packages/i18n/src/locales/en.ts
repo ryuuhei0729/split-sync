@@ -195,6 +195,11 @@ const en: TranslationShape = {
     emailPlaceholder: "Email address",
     passwordPlaceholder: "Password",
     confirmationSent: "Confirmation email sent. Please check your inbox.",
+    confirmEmailSent: "Confirmation email sent",
+    confirmEmailDesc:
+      "We sent a confirmation email to your address. Click the link in the email to complete your registration.",
+    backToLogin: "Back to sign in",
+    createAccount: "Create a new account",
     or: "or",
     terms: "Terms of Service",
     termsAgree: "By continuing, you agree to the Terms of Service and Privacy Policy.",

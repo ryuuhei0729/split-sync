@@ -192,6 +192,11 @@ const ja = {
     emailPlaceholder: "メールアドレス",
     passwordPlaceholder: "パスワード",
     confirmationSent: "確認メールを送信しました。メールをご確認ください。",
+    confirmEmailSent: "確認メール送信",
+    confirmEmailDesc:
+      "ご登録のメールアドレスに確認メールを送信しました。メール内のリンクをクリックして登録を完了してください。",
+    backToLogin: "ログイン画面に戻る",
+    createAccount: "新しいアカウントを作成",
     or: "または",
     terms: "利用規約",
     termsAgree: "続行することで、利用規約とプライバシーポリシーに同意したものとみなされます。",

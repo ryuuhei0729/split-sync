@@ -154,3 +154,180 @@ describe("export-pipeline — summaryImageUri によるフィルタ分岐", () =
     });
   });
 });
+
+// =============================================================================
+// Sprint Contract テストスケルトン
+// HW エンコーダ + 音声 Copy 最適化スプリント
+//
+// NOTE: このブロックはスケルトンのみ。
+// - getHwEncoder / buildVideoBitrateArgs / buildVideoEncoderArgs / buildAudioArgs /
+//   detectAudioCodec は未実装のため、import はコメントアウト。
+// - Phase B で Developer が実装完了後、コメントアウトを外して実装する。
+// - テストフレームワーク未導入のため、テスト自体は it.todo() で記述する。
+//   純粋関数 (buildVideoBitrateArgs / buildVideoEncoderArgs / buildAudioArgs) のみ
+//   実環境なしで単体テスト可能。
+//
+// 対象ファイル (実装後):
+//   apps/mobile/lib/video/export-pipeline.ts
+//
+// Sprint Contract 参照 (HW エンコーダスプリント):
+//   HW-V-01: buildVideoBitrateArgs — 各 resolution → 期待ビットレート文字列
+//   HW-V-02: buildVideoEncoderArgs — encoder=null → libx264 veryfast
+//   HW-V-03: buildVideoEncoderArgs — encoder=h264_videotoolbox → HW 引数
+//   HW-V-04: buildVideoEncoderArgs — encoder=h264_mediacodec → HW 引数
+//   HW-V-05: buildAudioArgs — "aac" → "-c:a copy"
+//   HW-V-06: buildAudioArgs — "AAC" (大文字) → "-c:a copy" (case-insensitive)
+//   HW-V-07: buildAudioArgs — "pcm_s16le" → "-c:a aac -b:a 128k"
+//   HW-V-08: buildAudioArgs — null → "-c:a aac -b:a 128k"
+//   HW-V-09: buildAudioArgs — undefined → "-c:a aac -b:a 128k"
+// =============================================================================
+
+// import {
+//   buildVideoBitrateArgs,
+//   buildVideoEncoderArgs,
+//   buildAudioArgs,
+// } from "../lib/video/export-pipeline";
+
+describe("export-pipeline — HW エンコーダ最適化 (HW エンコーダスプリント)", () => {
+
+  // ---------- buildVideoBitrateArgs (純粋関数) ----------
+  describe("buildVideoBitrateArgs(resolution)", () => {
+    it.todo('resolution="original" → 高ビットレート文字列を返す');
+    // 期待例: ["-b:v", "8M"] または ["-maxrate", "8M", "-bufsize", "16M"]
+    // 検証: buildVideoBitrateArgs("original") の戻り値が期待する文字列配列に一致する
+
+    it.todo('resolution="1080" → 中ビットレート文字列を返す');
+    // 期待例: ["-b:v", "5M"] 相当
+    // 検証: buildVideoBitrateArgs("1080") の戻り値が期待する文字列配列に一致する
+
+    it.todo('resolution="720" → 中ビットレート文字列を返す');
+    // 期待例: ["-b:v", "3M"] 相当
+    // 検証: buildVideoBitrateArgs("720") の戻り値が期待する文字列配列に一致する
+
+    // NOTE: resolution="480" は ExportResolution 型 ("720" | "1080" | "original") に存在しない。
+    // buildVideoBitrateArgs は default ケースで "720" と同じ低ビットレートを返す。
+    // TypeScript レベルで "480" は渡せないため、このケースのテストは不要。削除済み。
+  });
+
+  // ---------- buildVideoEncoderArgs (純粋関数) ----------
+  describe("buildVideoEncoderArgs(encoder, resolution, crf)", () => {
+    it.todo('encoder=null → libx264 + preset veryfast + -crf が出力に含まれる');
+    // 前提: encoder = null, resolution = "720", crf = "23"
+    // 期待: 戻り値配列に "-c:v", "libx264", "-preset", "veryfast", "-crf", "23" が含まれる
+    // 検証: buildVideoEncoderArgs(null, "720", "23") の戻り値を検査
+
+    it.todo('encoder=null のとき preset が "medium" でない (veryfast に変更されている)');
+    // 前提: encoder = null
+    // 期待: 戻り値に "medium" が含まれない
+    // 検証: buildVideoEncoderArgs(null, "original", "18").join(" ") に "medium" が含まれない
+
+    it.todo('encoder="h264_videotoolbox" → HW エンコーダ引数が出力に含まれる');
+    // 前提: encoder = "h264_videotoolbox", resolution = "original", crf = "18"
+    // 期待: 戻り値配列に "-c:v", "h264_videotoolbox" が含まれる
+    //        かつ "-preset" が含まれない (HW エンコーダは preset 非対応)
+    // 検証: buildVideoEncoderArgs("h264_videotoolbox", "original", "18") を検査
+
+    it.todo('encoder="h264_mediacodec" → HW エンコーダ引数が出力に含まれる');
+    // 前提: encoder = "h264_mediacodec", resolution = "720", crf = "23"
+    // 期待: 戻り値配列に "-c:v", "h264_mediacodec" が含まれる
+    // 検証: buildVideoEncoderArgs("h264_mediacodec", "720", "23") を検査
+
+    it.todo('encoder="h264_videotoolbox" のとき buildVideoBitrateArgs の結果が含まれる');
+    // 前提: HW エンコーダ使用時は CRF 非対応のため -b:v でビットレート指定
+    // 期待: 戻り値に "-b:v" が含まれる
+    // 検証: buildVideoEncoderArgs("h264_videotoolbox", "720", "23").join(" ") に "-b:v" が含まれる
+  });
+
+  // ---------- buildAudioArgs (純粋関数) ----------
+  describe("buildAudioArgs(codec)", () => {
+    it.todo('codec="aac" → "-c:a copy" を返す');
+    // 期待: buildAudioArgs("aac") が ["-c:a", "copy"] に一致する
+
+    it.todo('codec="AAC" (大文字) → "-c:a copy" を返す (case-insensitive)');
+    // 期待: buildAudioArgs("AAC") が ["-c:a", "copy"] に一致する
+    // 目的: audioCodec の case sensitivity リスク (Planner Risk 項目) を検証
+
+    it.todo('codec="Aac" (混合大文字) → "-c:a copy" を返す');
+    // 期待: buildAudioArgs("Aac") が ["-c:a", "copy"] に一致する
+
+    it.todo('codec="pcm_s16le" → "-c:a aac -b:a 128k" を返す');
+    // 期待: buildAudioArgs("pcm_s16le") が ["-c:a", "aac", "-b:a", "128k"] に一致する
+
+    it.todo('codec="mp3" → "-c:a aac -b:a 128k" を返す');
+    // 期待: buildAudioArgs("mp3") が ["-c:a", "aac", "-b:a", "128k"] に一致する
+
+    it.todo('codec=null → "-c:a aac -b:a 128k" を返す (FFprobe 失敗時の安全側挙動)');
+    // 期待: buildAudioArgs(null) が ["-c:a", "aac", "-b:a", "128k"] に一致する
+    // 目的: FFprobe 失敗時の安全側挙動確認
+
+    it.todo('codec=undefined → "-c:a aac -b:a 128k" を返す');
+    // 期待: buildAudioArgs(undefined) が ["-c:a", "aac", "-b:a", "128k"] に一致する
+  });
+
+  // ---------- getHwEncoder (Platform 依存 — モック必要) ----------
+  describe("getHwEncoder() [it.todo: モック必要]", () => {
+    it.todo('Platform.OS="ios" → "h264_videotoolbox" を返す');
+    // モック: Platform.OS = "ios"
+    // 期待: getHwEncoder() が "h264_videotoolbox" を返す
+
+    it.todo('Platform.OS="android" → "h264_mediacodec" を返す');
+    // モック: Platform.OS = "android"
+    // 期待: getHwEncoder() が "h264_mediacodec" を返す
+
+    it.todo('Platform.OS="web" → null を返す');
+    // モック: Platform.OS = "web" (or "windows")
+    // 期待: getHwEncoder() が null を返す
+  });
+
+  // ---------- detectAudioCodec (FFprobeKit 依存 — モック必要) ----------
+  describe("detectAudioCodec(videoUri) [it.todo: FFprobeKit モック必要]", () => {
+    it.todo('FFprobeKit が "aac" を返す → "aac" を返す');
+    // モック: FFprobeKit.execute が JSON ストリーム情報を返す (codec_name="aac")
+    // 期待: detectAudioCodec("file:///test.mp4") が "aac" に一致する
+
+    it.todo('FFprobeKit がエラーを返す → null を返す (安全側挙動)');
+    // モック: FFprobeKit.execute が失敗ステータスを返す
+    // 期待: detectAudioCodec("file:///test.mp4") が null を返す (例外を throw しない)
+
+    it.todo('動画に音声ストリームがない → null を返す');
+    // モック: FFprobeKit が空ストリーム JSON を返す
+    // 期待: detectAudioCodec("file:///no-audio.mp4") が null を返す
+  });
+
+  // ---------- exportVideoWithStopwatch — HW フォールバック統合 (モック必要) ----------
+  describe("exportVideoWithStopwatch — HW → SW フォールバック [it.todo: FFmpegKit モック必要]", () => {
+    it.todo('iOS Simulator で HW フォールバックが動作する (1回のみ再試行)');
+    // 前提: getHwEncoder = "h264_videotoolbox" だが、execute が失敗
+    // 期待: FFmpegKit.execute が 2 回呼ばれる (1回目: HW, 2回目: SW libx264 veryfast)
+    //        かつ 2 回目は成功し、outputPath が返る
+
+    it.todo('HW フォールバック後の再試行コマンドに "-preset veryfast" が含まれる');
+    // 期待: フォールバック後のコマンドに "libx264" と "veryfast" が含まれる
+    //        "medium" は含まれない
+
+    it.todo('HW も SW も失敗した場合 → Error が throw される');
+    // 前提: 両方の execute が失敗
+    // 期待: exportVideoWithStopwatch が Error を throw する
+
+    it.todo('フォールバックは 1 回のみ (SW フォールバック後は再試行しない)');
+    // 前提: HW 失敗 → SW 失敗
+    // 期待: FFmpegKit.execute が 2 回のみ呼ばれる (3 回目は呼ばれない)
+
+    it.todo('音声 AAC ケースで -c:a copy が FFmpeg コマンドに含まれる');
+    // 前提: detectAudioCodec が "aac" を返す
+    // 期待: FFmpegKit.execute に渡されるコマンドに "-c:a copy" が含まれる
+    //        "-c:a aac -b:a 128k" が含まれない
+
+    it.todo('音声 非AAC ケースで -c:a aac -b:a 128k が FFmpeg コマンドに含まれる');
+    // 前提: detectAudioCodec が "pcm_s16le" を返す
+    // 期待: FFmpegKit.execute に渡されるコマンドに "-c:a aac -b:a 128k" が含まれる
+
+    it.todo('FCResult あり (summaryImageUri 指定) でも HW エンコーダが使用される');
+    // 前提: summaryImageUri あり, getHwEncoder = "h264_videotoolbox"
+    // 期待: filter_complex パスのコマンドに "h264_videotoolbox" が含まれる
+
+    it.todo('FCResult なし (-vf パス) でも HW エンコーダが使用される');
+    // 前提: summaryImageUri = null, iconUri = null, getHwEncoder = "h264_videotoolbox"
+    // 期待: -vf パスのコマンドに "h264_videotoolbox" が含まれる
+  });
+});
