@@ -25,7 +25,10 @@ import {
 } from "../../lib/guest-daily-limit";
 import { GuestExportIndicator } from "../../components/plan/GuestExportIndicator";
 import { FinishSummaryTable } from "../../components/splits/FinishSummaryTable";
-import { getStopwatchWrapperStyle } from "../../components/stopwatch/StopwatchOverlay";
+import {
+  getStopwatchWrapperStyle,
+  getMeasuredWrapperStyle,
+} from "../../components/stopwatch/StopwatchOverlay";
 
 // react-native-view-shot loaded lazily to avoid crashing in Expo Go
 function getCaptureRef() {
@@ -74,6 +77,9 @@ export default function ExportScreen() {
   // --- Summary PNG capture ref & URI ---
   const summaryViewRef = useRef<View>(null);
   const [capturedSummaryUri, setCapturedSummaryUri] = useState<string | null>(null);
+  const [captureSummaryLayout, setCaptureSummaryLayout] = useState<
+    { width: number; height: number } | null
+  >(null);
   const summaryReadyRef = useRef(false);
 
   // --- Derived ---
@@ -165,12 +171,14 @@ export default function ExportScreen() {
     }
   }, [effectivePlan]);
 
-  // Pre-capture the summary PNG once the off-screen view has had time to lay
-  // out. Doing this on a delayed mount tick (rather than at handleExport
-  // time) avoids the race where the captured bitmap can be empty because the
-  // view's first commit hadn't reached the native renderer yet.
+  // Pre-capture the summary PNG once the off-screen wrapper has laid out and
+  // settled to pixel-based positioning. captureSummaryLayout becoming
+  // non-null is the signal that the wrapper re-rendered with absolute coords
+  // — the capture before that point would use the percentage/transform style
+  // that doesn't always survive view-shot's snapshot.
   useEffect(() => {
     if (!isFinished || finishTime === null) return;
+    if (!captureSummaryLayout) return;
     if (summaryReadyRef.current) return;
     const handle = setTimeout(() => {
       const captureRef = getCaptureRef();
@@ -180,6 +188,10 @@ export default function ExportScreen() {
         quality: 1.0,
         width: videoWidth,
         height: videoHeight,
+        // iOS-only: use renderInContext instead of the default
+        // drawViewHierarchyInRect. Recommended by the view-shot README when
+        // the default strategy returns a blank bitmap.
+        useRenderInContext: true,
       })
         .then((uri) => {
           summaryReadyRef.current = true;
@@ -188,9 +200,9 @@ export default function ExportScreen() {
         .catch(() => {
           // Leave summaryReadyRef false so handleExport will try again.
         });
-    }, 300);
+    }, 100);
     return () => clearTimeout(handle);
-  }, [isFinished, finishTime, videoWidth, videoHeight]);
+  }, [isFinished, finishTime, videoWidth, videoHeight, captureSummaryLayout]);
 
   const handleExport = useCallback(async () => {
     if (!videoUri || startTime === null) {
@@ -344,13 +356,30 @@ export default function ExportScreen() {
 
   const showSummaryCapture = isFinished && finishTime !== null;
 
+  // Measured size of the inner summary table — used to position the wrapper
+  // with absolute pixels instead of a `transform: translate(-50%, -50%)`
+  // (which on iOS/Android sometimes isn't picked up by view-shot, so the
+  // capture would be empty/clipped → no summary in the exported video).
+  const captureWrapperStyle = captureSummaryLayout
+    ? getMeasuredWrapperStyle(
+        stopwatchConfig.summaryPosition,
+        stopwatchConfig.summaryAnchor,
+        videoWidth,
+        videoHeight,
+        captureSummaryLayout,
+      )
+    : getStopwatchWrapperStyle(
+        stopwatchConfig.summaryPosition,
+        stopwatchConfig.summaryAnchor,
+      );
+
   return (
     <View style={styles.container}>
-      {/* Hidden summary view for PNG capture — rendered off-screen at video resolution.
-          The outer View (summaryCapture) is sized to videoWidth × videoHeight.
-          The inner View (summaryCaptureInner) mirrors StopwatchOverlay.summaryWrapper:
-            position: "absolute", top: "55%", left: 0, right: 0, alignItems: "center"
-          This produces the same pixel position in the PNG as seen in the preview. */}
+      {/* Hidden summary view for PNG capture — rendered on-screen but at
+          near-zero opacity. Off-screen (top:-100000) was unreliable on
+          recent iOS/RN versions: view-shot would return an empty bitmap.
+          collapsable={false} keeps Android's view manager from
+          short-circuiting it. */}
       {showSummaryCapture && (
         <View
           ref={summaryViewRef}
@@ -359,12 +388,19 @@ export default function ExportScreen() {
             { width: videoWidth, height: videoHeight },
           ]}
           pointerEvents="none"
+          collapsable={false}
         >
           <View
-            style={getStopwatchWrapperStyle(
-              stopwatchConfig.summaryPosition,
-              stopwatchConfig.summaryAnchor,
-            )}
+            style={captureWrapperStyle}
+            collapsable={false}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              setCaptureSummaryLayout((prev) =>
+                prev && prev.width === width && prev.height === height
+                  ? prev
+                  : { width, height },
+              );
+            }}
           >
             <FinishSummaryTable
               splitTimes={splitTimes}
@@ -517,16 +553,17 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xl,
   },
-  // Off-screen hidden view for summary PNG capture.
-  // Sized to videoWidth × videoHeight so captureRef produces a 1:1 PNG that aligns
-  // pixel-perfect with the output frame. We push it off-screen via top/left rather
-  // than using opacity: 0 — react-native-view-shot captures a transparent (empty)
-  // bitmap when the source view's effective alpha is 0, which is why the summary
-  // was previously missing from exported videos.
+  // Hidden view for summary PNG capture, sized to videoWidth × videoHeight so
+  // captureRef produces a 1:1 PNG with the output frame. We render at
+  // (0, 0) with near-zero opacity — *not* opacity:0, which view-shot
+  // sometimes reads as a fully-transparent bitmap; and *not* far-off-screen
+  // (top:-100000), which view-shot has stopped capturing reliably on recent
+  // RN/iOS combinations.
   summaryCapture: {
     position: "absolute",
-    top: -100000,
-    left: -100000,
+    top: 0,
+    left: 0,
+    opacity: 0.01,
   },
   summaryCard: {
     backgroundColor: colors.surface,

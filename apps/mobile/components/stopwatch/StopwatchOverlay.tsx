@@ -523,7 +523,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
             style={{
               color: "white",
               fontSize: watermarkFontSize,
-              fontFamily: "NotoSans-Bold",
+              fontFamily: "NotoSansJP-Bold",
             }}
           >
             SwimHub Timer
@@ -557,7 +557,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
                       color: config.textColor,
                       fontSize: scaledFontSize,
                       fontFamily:
-                        config.fontFamily === "monospace" ? "NotoSansMono-Bold" : "NotoSans-Bold",
+                        config.fontFamily === "monospace" ? "NotoSansMono-Bold" : "NotoSansJP-Bold",
                       fontVariant: ["tabular-nums"],
                     }}
                   >
@@ -694,7 +694,7 @@ function SplitBadge({
       ? `${formatDistance(split.distance)}m: ${timeStr} (lap: ${formatTime(split.lapTime)})`
       : `${formatDistance(split.distance)}m: ${timeStr}`;
   const fontFamily =
-    config.fontFamily === "monospace" ? "NotoSansMono-Bold" : "NotoSans-Bold";
+    config.fontFamily === "monospace" ? "NotoSansMono-Bold" : "NotoSansJP-Bold";
 
   return (
     <View
@@ -762,7 +762,7 @@ export function getStopwatchWrapperStyle(
 // switch to absolute coords so React Native's hit-testing rectangle matches
 // what the user sees — critical for non-bottom-left anchors that otherwise
 // rely on a `transform: translate(-50%, -50%)`.
-function getMeasuredWrapperStyle(
+export function getMeasuredWrapperStyle(
   position: { x: number; y: number },
   anchor: StopwatchAnchor,
   contentWidth: number,

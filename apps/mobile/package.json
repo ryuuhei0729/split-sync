@@ -37,6 +37,7 @@
     "expo-web-browser": "~55.0.12",
     "ffmpeg-kit-react-native": "github:jdarshan5/ffmpeg-kit-react-native#rn-binaries",
     "i18next": "^24.0.0",
+    "intl-pluralrules": "^2.0.1",
     "react": "19.2.4",
     "react-i18next": "^15.0.0",
     "react-native": "0.83.4",

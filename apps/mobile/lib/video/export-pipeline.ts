@@ -201,6 +201,7 @@ function buildPassedSplitFilters(
   splits: SplitTime[],
   raceDistance: number | null,
   fontPath: string | null,
+  memoFontPath: string | null,
 ): string[] {
   if (splits.length === 0) return [];
 
@@ -280,8 +281,11 @@ function buildPassedSplitFilters(
     const trimmedMemo = s.memo?.trim();
     if (trimmedMemo) {
       const memoYExpr = appendOffset(splitYExpr, headlineH);
+      // Memo content may include Japanese — always use the JP-capable font
+      // regardless of the user's `config.fontFamily` preference.
+      const memoFontPart = fontfileArg(memoFontPath);
       const memoParts = [
-        ...(fontPart ? [fontPart] : []),
+        ...(memoFontPart ? [memoFontPart] : []),
         `fontsize=${splitMemoFontSize}`,
         `fontcolor=${config.textColor}`,
         `box=1`,
@@ -351,7 +355,10 @@ async function getWatermarkIconUri(): Promise<string | null> {
 }
 
 interface ResolvedFonts {
+  /** Japanese-capable sans-serif Bold — also covers Latin. Used for memo and
+   *  any text that may contain Japanese characters. */
   sansBold: string | null;
+  /** Latin-only monospace Bold. Suitable for the timer's digit-only display. */
   monoBold: string | null;
 }
 
@@ -363,7 +370,7 @@ interface ResolvedFonts {
 async function resolveStopwatchFonts(): Promise<ResolvedFonts> {
   try {
     const { Asset } = require("expo-asset") as typeof import("expo-asset");
-    const sansAsset = Asset.fromModule(require("../../assets/fonts/NotoSans-Bold.ttf"));
+    const sansAsset = Asset.fromModule(require("../../assets/fonts/NotoSansJP-Bold.ttf"));
     const monoAsset = Asset.fromModule(require("../../assets/fonts/NotoSansMono-Bold.ttf"));
     await Promise.all([sansAsset.downloadAsync(), monoAsset.downloadAsync()]);
     return {
@@ -597,6 +604,7 @@ export async function exportVideoWithStopwatch(
       splitTimes,
       raceDistance,
       timerFont,
+      fonts.sansBold,
     ),
     ...(showWatermark ? [buildWatermarkFilter(watermarkHeight, fonts.sansBold)] : []),
   ];
@@ -613,14 +621,21 @@ export async function exportVideoWithStopwatch(
 
   function buildCommand(decodeArgs: string, vArgs: string, aArgs: string): string {
     const decodePrefix = decodeArgs ? `${decodeArgs} ` : "";
+    // -ignore_unknown lets FFmpeg skip streams whose codec it can't parse
+    //   (e.g. Apple's spatial-audio `apac` codec on iPhone 16 captures).
+    // -map 0:a:0? maps only the FIRST audio stream from input 0 — the
+    //   compatibility AAC track — so we never touch the spatial-audio track
+    //   that ffmpeg-kit doesn't have a decoder for.
+    const ignoreUnknown = "-ignore_unknown";
+    const audioMap = "-map 0:a:0?";
     if (fcResult) {
       const inputPart = fcResult.inputArgs.map((p) => `-i "${p}"`).join(" ");
-      return `-y ${decodePrefix}-i "${videoUri}" ${inputPart} -filter_complex "${fcResult.filterComplex}" -map "${fcResult.outputLabel}" -map 0:a? ${vArgs} ${aArgs} -movflags +faststart "${outputPath}"`;
+      return `-y ${ignoreUnknown} ${decodePrefix}-i "${videoUri}" ${inputPart} -filter_complex "${fcResult.filterComplex}" -map "${fcResult.outputLabel}" ${audioMap} ${vArgs} ${aArgs} -movflags +faststart "${outputPath}"`;
     }
     // No overlay inputs — use simple -vf
     const scaleFilter = exportSettings.resolution !== "original" ? `scale=-2:${exportSettings.resolution},` : "";
     const filterChain = `${scaleFilter}${drawFiltersForFC.join(",")}`;
-    return `-y ${decodePrefix}-i "${videoUri}" -vf "${filterChain}" ${vArgs} ${aArgs} -movflags +faststart "${outputPath}"`;
+    return `-y ${ignoreUnknown} ${decodePrefix}-i "${videoUri}" -vf "${filterChain}" ${audioMap} ${vArgs} ${aArgs} -movflags +faststart "${outputPath}"`;
   }
 
   const decodeArgs = buildHwDecodeArgs(hwEncoder !== null);
