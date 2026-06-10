@@ -70,7 +70,15 @@ export function loadStopwatchConfig(): StopwatchConfig {
   if (!json) return { ...MOBILE_DEFAULT_STOPWATCH_CONFIG };
 
   try {
-    return { ...MOBILE_DEFAULT_STOPWATCH_CONFIG, ...JSON.parse(json) };
+    const parsed = JSON.parse(json);
+    const merged = { ...MOBILE_DEFAULT_STOPWATCH_CONFIG, ...parsed };
+    // Migrate the legacy too-small default summary scale (exactly 1 = never
+    // adjusted; pinch/resize always yields fractional values) to the new
+    // larger default so existing saved configs aren't stuck tiny.
+    if (parsed.summaryScale === 1) {
+      merged.summaryScale = MOBILE_DEFAULT_STOPWATCH_CONFIG.summaryScale;
+    }
+    return merged;
   } catch {
     return { ...MOBILE_DEFAULT_STOPWATCH_CONFIG };
   }

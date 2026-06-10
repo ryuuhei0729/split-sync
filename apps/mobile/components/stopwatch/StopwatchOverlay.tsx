@@ -13,24 +13,39 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useEditorStore } from "../../stores/editor-store";
-import { formatTime, STOPWATCH_FONT_SIZE_MIN } from "@swimhub-timer/shared";
+import {
+  formatTime,
+  STOPWATCH_FONT_SIZE_MIN,
+  SPLIT_DISPLAY_DURATION_SECONDS,
+  SUMMARY_DELAY_SECONDS,
+} from "@swimhub-timer/shared";
 import type { StopwatchAnchor } from "@swimhub-timer/shared";
 import { FinishSummaryTable } from "../splits/FinishSummaryTable";
 
 interface Props {
   videoWidth: number;
   videoHeight: number;
+  /**
+   * When true, this overlay renders its layout + drag/resize handles but makes
+   * the visible chrome (timer box/text, split badge, summary table, watermark)
+   * transparent/omitted. Used in the Skia preview (Phase 3): StopwatchSkiaOverlay
+   * draws the WYSIWYG pixels underneath, and this layer sits on top purely for
+   * gesture handling, so editing keeps working while the visuals match export.
+   */
+  hideVisuals?: boolean;
 }
 
-export const SPLIT_DISPLAY_DURATION_SECONDS = 3;
+// Re-exported from the shared single source of truth (kept for existing importers).
+export { SPLIT_DISPLAY_DURATION_SECONDS };
 
 const TIMER_EDIT_BORDER_COLOR = "#3B82F6";
 const TIMER_EDIT_BORDER_WIDTH = 2;
 const RESIZE_HANDLE_SIZE = 28;
+const HANDLE_OVERLAP_PAD = Math.round(RESIZE_HANDLE_SIZE / 2);
 const TAP_MOVE_THRESHOLD_PX = 6;
 const TAP_MAX_DURATION_MS = 250;
 
-export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
+export function StopwatchOverlay({ videoWidth, videoHeight, hideVisuals = false }: Props) {
   const config = useEditorStore((s) => s.stopwatchConfig);
   const startTime = useEditorStore((s) => s.startTime);
   const currentVideoTime = useEditorStore((s) => s.currentVideoTime);
@@ -39,6 +54,14 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   const finishTime = useEditorStore((s) => s.finishTime);
   const raceDistance = useEditorStore((s) => s.raceDistance);
   const updateStopwatchConfig = useEditorStore((s) => s.updateStopwatchConfig);
+  // Publish editing state so the Skia preview defers the element under edit.
+  const setStoreTimerEditing = useEditorStore((s) => s.setTimerEditing);
+  const setStoreSummaryEditing = useEditorStore((s) => s.setSummaryEditing);
+  // On-screen bounds published by the Skia preview — the gesture layer (when
+  // hideVisuals) positions its hit areas + selection frame from these so the
+  // chrome is glued to the Skia glyphs (single geometry, no jump).
+  const timerPreviewBounds = useEditorStore((s) => s.timerPreviewBounds);
+  const summaryPreviewBounds = useEditorStore((s) => s.summaryPreviewBounds);
 
   // Tracking content rect in state (not just a ref) so the wrapper can be
   // positioned in absolute pixels — percentage-based transforms didn't apply
@@ -48,6 +71,24 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   const [summaryLayout, setSummaryLayout] = useState<{ width: number; height: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const [summaryEditing, setSummaryEditing] = useState(false);
+
+  // Mirror local editing state into the store so StopwatchSkiaOverlay can skip
+  // drawing the element currently under edit (the RN chrome below renders it
+  // instead, keeping the selection frame aligned with the glyphs). Reset on
+  // unmount so a stale "editing" flag never hides the Skia element.
+  useEffect(() => {
+    setStoreTimerEditing(editing);
+  }, [editing, setStoreTimerEditing]);
+  useEffect(() => {
+    setStoreSummaryEditing(summaryEditing);
+  }, [summaryEditing, setStoreSummaryEditing]);
+  useEffect(
+    () => () => {
+      setStoreTimerEditing(false);
+      setStoreSummaryEditing(false);
+    },
+    [setStoreTimerEditing, setStoreSummaryEditing],
+  );
 
   const containerSize = useRef({ width: 0, height: 0 });
 
@@ -366,6 +407,9 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   // Re-center the timer the first time both the content rect and the timer
   // have been measured, but only if the user has not already moved it.
   useEffect(() => {
+    // In Skia-preview mode geometry comes from the shared calculatePosition
+    // (so preview == export); this RN-layout-based recenter would fight it.
+    if (hideVisuals) return;
     if (initialCenterApplied.current) return;
     if (contentRect.width === 0 || contentRect.height === 0) return;
     if (!timerLayout) return;
@@ -378,7 +422,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
     const newX = Math.max(0, 0.5 - timerLayout.width / (2 * contentRect.width));
     const newY = Math.min(1, 0.5 + timerLayout.height / (2 * contentRect.height));
     updateStopwatchConfig({ position: { x: newX, y: newY } });
-  }, [contentRect, timerLayout, updateStopwatchConfig]);
+  }, [contentRect, timerLayout, updateStopwatchConfig, hideVisuals]);
 
   const elapsedRaw =
     startTime !== null ? Math.max(0, currentVideoTime - startTime) : 0;
@@ -415,6 +459,102 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
     );
   }
 
+  // --- Skia-preview gesture layer -------------------------------------------
+  // When the Skia overlay owns the visuals, this component is a thin invisible
+  // touch layer: drag/resize/pan/pinch hit areas + selection frame, positioned
+  // from the bounds the Skia layer published. One geometry → frame glued to the
+  // glyphs, no jump, preview == export.
+  if (hideVisuals) {
+    const showSummaryNow =
+      isFinished && finishTime !== null && currentVideoTime - startTime >= finishTime + SUMMARY_DELAY_SECONDS;
+    const pad = HANDLE_OVERLAP_PAD;
+
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={onContainerLayout}>
+        {(editing || summaryEditing) && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setEditing(false);
+              setSummaryEditing(false);
+            }}
+          />
+        )}
+
+        {!showSummaryNow && timerPreviewBounds && (
+          <View
+            style={{
+              position: "absolute",
+              left: timerPreviewBounds.x,
+              top: timerPreviewBounds.y - (editing ? pad : 0),
+              width: timerPreviewBounds.width + (editing ? pad : 0),
+              height: timerPreviewBounds.height + (editing ? pad : 0),
+            }}
+            pointerEvents="box-none"
+          >
+            <View
+              {...timerPanResponder.panHandlers}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: editing ? pad : 0,
+                width: timerPreviewBounds.width,
+                height: timerPreviewBounds.height,
+                borderWidth: editing ? TIMER_EDIT_BORDER_WIDTH : 0,
+                borderColor: editing ? TIMER_EDIT_BORDER_COLOR : "transparent",
+              }}
+            />
+            {editing && (
+              <View
+                {...resizePanResponder.panHandlers}
+                style={[styles.resizeHandle, { top: 0, right: 0 }]}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
+              </View>
+            )}
+          </View>
+        )}
+
+        {showSummaryNow && summaryPreviewBounds && (
+          <View
+            style={{
+              position: "absolute",
+              left: summaryPreviewBounds.x,
+              top: summaryPreviewBounds.y - (summaryEditing ? pad : 0),
+              width: summaryPreviewBounds.width + (summaryEditing ? pad : 0),
+              height: summaryPreviewBounds.height + (summaryEditing ? pad : 0),
+            }}
+            pointerEvents="box-none"
+          >
+            <View
+              {...summaryPanResponder.panHandlers}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: summaryEditing ? pad : 0,
+                width: summaryPreviewBounds.width,
+                height: summaryPreviewBounds.height,
+                borderWidth: summaryEditing ? TIMER_EDIT_BORDER_WIDTH : 0,
+                borderColor: summaryEditing ? TIMER_EDIT_BORDER_COLOR : "transparent",
+                borderRadius: 8,
+              }}
+            />
+            {summaryEditing && (
+              <View
+                {...summaryResizePanResponder.panHandlers}
+                style={[styles.resizeHandle, { top: 0, right: 0 }]}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                <Ionicons name="expand-outline" size={16} color="#FFFFFF" />
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  }
+
   const elapsed = isFinished && finishTime !== null ? Math.min(elapsedRaw, finishTime) : elapsedRaw;
   const timeText = formatTime(elapsed);
 
@@ -444,7 +584,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   const showSummary =
     isFinished &&
     finishTime !== null &&
-    currentVideoTime - startTime >= finishTime;
+    currentVideoTime - startTime >= finishTime + SUMMARY_DELAY_SECONDS;
 
   const splitFontSize = Math.max(8, Math.round(scaledFontSize * 0.55));
   const splitMemoFontSize = Math.max(7, Math.round(scaledFontSize * 0.38));
@@ -457,7 +597,6 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
   // (touches outside parent bounds aren't delivered to children on either
   // platform). Half the handle is allowed to overlap the inner box so the
   // handle visually anchors closer to the digits.
-  const HANDLE_OVERLAP_PAD = Math.round(RESIZE_HANDLE_SIZE / 2);
   const handlePadTop = editing ? HANDLE_OVERLAP_PAD : 0;
   const handlePadRight = editing ? HANDLE_OVERLAP_PAD : 0;
   const summaryHandlePadTop = summaryEditing ? HANDLE_OVERLAP_PAD : 0;
@@ -498,37 +637,39 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
           />
         )}
 
-        {/* Watermark */}
-        <View
-          style={{
-            position: "absolute",
-            right: "3%",
-            bottom: "3%",
-            flexDirection: "row",
-            alignItems: "center",
-            opacity: 0.3,
-          }}
-          pointerEvents="none"
-        >
-          <Image
-            source={require("../../assets/icon.png")}
+        {/* Watermark (Skia draws this when hideVisuals) */}
+        {!hideVisuals && (
+          <View
             style={{
-              width: watermarkFontSize,
-              height: watermarkFontSize,
-              borderRadius: watermarkFontSize * 0.2,
-              marginRight: watermarkFontSize * 0.3,
+              position: "absolute",
+              right: "3%",
+              bottom: "3%",
+              flexDirection: "row",
+              alignItems: "center",
+              opacity: 0.3,
             }}
-          />
-          <Text
-            style={{
-              color: "white",
-              fontSize: watermarkFontSize,
-              fontFamily: "NotoSansJP-Bold",
-            }}
+            pointerEvents="none"
           >
-            SwimHub Timer
-          </Text>
-        </View>
+            <Image
+              source={require("../../assets/icon.png")}
+              style={{
+                width: watermarkFontSize,
+                height: watermarkFontSize,
+                borderRadius: watermarkFontSize * 0.2,
+                marginRight: watermarkFontSize * 0.3,
+              }}
+            />
+            <Text
+              style={{
+                color: "white",
+                fontSize: watermarkFontSize,
+                fontFamily: "NotoSansJP-Bold",
+              }}
+            >
+              SwimHub Timer
+            </Text>
+          </View>
+        )}
 
         {!showSummary && (
           <View style={timerWrapperStyle} pointerEvents="box-none">
@@ -545,7 +686,10 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
               >
                 <View
                   style={{
-                    backgroundColor: config.backgroundColor,
+                    // While editing the timer we render the RN box (and its blue
+                    // frame) so the frame stays glued to the glyphs; otherwise
+                    // Skia draws the timer and the RN box is transparent.
+                    backgroundColor: hideVisuals && !editing ? "transparent" : config.backgroundColor,
                     borderRadius: scaledRadius,
                     padding: scaledPadding,
                     borderWidth: editing ? TIMER_EDIT_BORDER_WIDTH : 0,
@@ -554,7 +698,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
                 >
                   <Text
                     style={{
-                      color: config.textColor,
+                      color: hideVisuals && !editing ? "transparent" : config.textColor,
                       fontSize: scaledFontSize,
                       fontFamily:
                         config.fontFamily === "monospace" ? "NotoSansMono-Bold" : "NotoSansJP-Bold",
@@ -582,7 +726,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
         {/* Active split badge — rendered as an absolute sibling of the timer
             wrapper so its width is sized to its own content rather than being
             constrained (and word-wrapped) by the timer text width. */}
-        {!showSummary && activeSplit && splitBadgeStyle && (
+        {!hideVisuals && !showSummary && activeSplit && splitBadgeStyle && (
           <View style={splitBadgeStyle} pointerEvents="none">
             <SplitBadge
               split={activeSplit}
@@ -616,17 +760,23 @@ export function StopwatchOverlay({ videoWidth, videoHeight }: Props) {
                     borderRadius: 8,
                   }}
                 >
-                  <FinishSummaryTable
-                    splitTimes={splitTimes}
-                    finishTime={finishTime!}
-                    config={{
-                      textColor: config.textColor,
-                      backgroundColor: config.backgroundColor,
-                      fontFamily: config.fontFamily,
-                    }}
-                    scaleFactor={scaleFactor * config.summaryScale}
-                    raceDistance={raceDistance}
-                  />
+                  {/* opacity:0 (not unmounted) when hidden so onSummaryLayout
+                      still measures the table → the drag/resize hit-area stays
+                      correct while Skia draws the visible summary. While editing
+                      the summary, show the RN table so its frame stays aligned. */}
+                  <View style={hideVisuals && !summaryEditing ? { opacity: 0 } : undefined}>
+                    <FinishSummaryTable
+                      splitTimes={splitTimes}
+                      finishTime={finishTime!}
+                      config={{
+                        textColor: config.textColor,
+                        backgroundColor: config.backgroundColor,
+                        fontFamily: config.fontFamily,
+                      }}
+                      scaleFactor={scaleFactor * config.summaryScale}
+                      raceDistance={raceDistance}
+                    />
+                  </View>
                 </View>
                 {summaryEditing && (
                   <View
