@@ -4,8 +4,16 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { Ionicons } from "@expo/vector-icons";
 import { useEditorStore } from "../../stores/editor-store";
 import { StopwatchOverlay } from "../stopwatch/StopwatchOverlay";
+import { StopwatchSkiaOverlay } from "../stopwatch/StopwatchSkiaOverlay";
 import { colors, spacing, radius, fontSize } from "../../lib/theme";
 import { formatTime } from "@swimhub-timer/shared";
+
+// Phase 3 (design-skia-unified-renderer.md §4.1): draw the overlay preview with
+// Skia so it's pixel-identical to the export. StopwatchSkiaOverlay renders the
+// WYSIWYG pixels (pointerEvents="none"); StopwatchOverlay sits on top with its
+// visible chrome hidden, providing only drag/resize/tap gestures + handles.
+// Requires a Skia-enabled native build (won't work in Expo Go).
+const USE_SKIA_PREVIEW = true;
 
 export function VideoPlayer() {
   const videoUri = useEditorStore((s) => s.videoUri);
@@ -87,9 +95,18 @@ export function VideoPlayer() {
             nativeControls={false}
           />
         )}
+        {/* Skia visuals underneath (read-only) ... */}
+        {USE_SKIA_PREVIEW && (
+          <StopwatchSkiaOverlay
+            videoWidth={videoMetadata?.width ?? 1920}
+            videoHeight={videoMetadata?.height ?? 1080}
+          />
+        )}
+        {/* ... RN gesture/handle layer on top (chrome hidden when Skia is active) */}
         <StopwatchOverlay
           videoWidth={videoMetadata?.width ?? 1920}
           videoHeight={videoMetadata?.height ?? 1080}
+          hideVisuals={USE_SKIA_PREVIEW}
         />
       </Pressable>
 

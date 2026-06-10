@@ -24,7 +24,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md}\""
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"],
+    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver", "@shopify/react-native-skia"],
     "overrides": {
       "@types/react": "^19.2.14",
       "react-native-screens": "4.23.0"
@@ -35,10 +35,5 @@
     "prettier": "^3.8.1",
     "turbo": "^2.8.16",
     "typescript": "^5"
-  },
-  "dependencies": {
-    "expo": "~55.0.0",
-    "react": "19.2.4",
-    "react-native": "0.83.4"
   }
 }

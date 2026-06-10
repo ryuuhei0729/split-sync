@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { renderStopwatch, renderSplitDisplay, renderWatermark, renderFinishSummary } from "@/lib/stopwatch/renderer";
+import { SPLIT_DISPLAY_DURATION_SECONDS, SUMMARY_DELAY_SECONDS } from "@swimhub-timer/shared";
 
 export function useCanvasCompositor(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
@@ -36,13 +37,16 @@ export function useCanvasCompositor(
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Compute elapsed from video position, but cap at finishTime if finished
-      let elapsed = startTime !== null ? Math.max(0, video.currentTime - startTime) : 0;
+      const rawElapsed = startTime !== null ? Math.max(0, video.currentTime - startTime) : 0;
+      let elapsed = rawElapsed;
       if (isFinished && finishTime !== null && elapsed > finishTime) {
         elapsed = finishTime;
       }
 
+      // Show the summary SUMMARY_DELAY_SECONDS after the finish (the timer stays
+      // frozen at finishTime during the gap) — matches the export + mobile.
       const summaryVisible =
-        isFinished && finishTime !== null && elapsed >= finishTime;
+        isFinished && finishTime !== null && rawElapsed >= finishTime + SUMMARY_DELAY_SECONDS;
 
       if (summaryVisible && finishTime !== null) {
         const contentRect = { x: 0, y: 0, width: canvas.width, height: canvas.height };
@@ -50,13 +54,12 @@ export function useCanvasCompositor(
       } else {
         renderStopwatch(ctx, stopwatchConfig, elapsed);
 
-        // Show split for 3 seconds after passing its time point
+        // Show split for SPLIT_DISPLAY_DURATION_SECONDS after passing its time point
         if (splitTimes.length > 0) {
-          const SPLIT_DISPLAY_DURATION = 3;
           let activeSplit = null;
           for (let i = splitTimes.length - 1; i >= 0; i--) {
             const s = splitTimes[i];
-            if (elapsed >= s.time && elapsed < s.time + SPLIT_DISPLAY_DURATION) {
+            if (elapsed >= s.time && elapsed < s.time + SPLIT_DISPLAY_DURATION_SECONDS) {
               activeSplit = s;
               break;
             }

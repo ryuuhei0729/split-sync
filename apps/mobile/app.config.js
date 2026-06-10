@@ -1,7 +1,7 @@
 module.exports = {
   name: "SH Timer",
   slug: "swimhub-timer",
-  version: "2.2.0",
+  version: "2.4.0",
   orientation: "portrait",
   icon: "./assets/icon.png",
   scheme: "swimhubtimer",

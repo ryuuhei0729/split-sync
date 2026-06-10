@@ -5,6 +5,13 @@ import en from "./locales/en";
 export const supportedLocales = ["ja", "en"] as const;
 export type SupportedLocale = (typeof supportedLocales)[number];
 export const defaultLocale: SupportedLocale = "ja";
+export const DEVICE_FALLBACK_LOCALE: SupportedLocale = "en";
+
+export function isSupportedLocale(
+  value: unknown
+): value is SupportedLocale {
+  return typeof value === "string" && (supportedLocales as readonly string[]).includes(value);
+}
 
 export const i18nResources = {
   ja: { translation: ja },
@@ -19,5 +26,8 @@ export function getI18nOptions(lng: SupportedLocale): InitOptions {
     interpolation: {
       escapeValue: false,
     },
+    compatibilityJSON: "v4",
+    returnNull: false,
+    react: { useSuspense: false },
   };
 }

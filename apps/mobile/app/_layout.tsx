@@ -1,10 +1,21 @@
-import "../lib/i18n";
 import { useEffect, useRef } from "react";
+import { I18nProvider } from "../providers/I18nProvider";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as Font from "expo-font";
 import { AuthProvider, useAuth } from "../contexts/AuthProvider";
 import { colors } from "../lib/theme";
+
+// Load the same fonts used by the FFmpeg exporter so the preview matches the
+// rendered video. NotoSansJP-Bold is the sans-serif default — its glyph set
+// covers Japanese as well as Latin, which the timer's memo overlay needs.
+// NotoSansMono-Bold is used when the user picks monospace (Latin only).
+// Best-effort: failures fall back to the system font.
+Font.loadAsync({
+  "NotoSansJP-Bold": require("../assets/fonts/NotoSansJP-Bold.ttf"),
+  "NotoSansMono-Bold": require("../assets/fonts/NotoSansMono-Bold.ttf"),
+}).catch(() => {});
 
 function AuthGate() {
   const { user, isAuthenticated, guestMode, loading } = useAuth();
@@ -61,10 +72,12 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <AuthProvider>
-      <StatusBar style="dark" />
-      <AuthGate />
-    </AuthProvider>
+    <I18nProvider>
+      <AuthProvider>
+        <StatusBar style="dark" />
+        <AuthGate />
+      </AuthProvider>
+    </I18nProvider>
   );
 }
 

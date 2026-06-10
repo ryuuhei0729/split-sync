@@ -34,6 +34,10 @@ export function FinishSummaryTable({
   const cellSplitWidth = Math.max(48, Math.round(90 * scaleFactor));
   const cellLapWidth = Math.max(32, Math.round(64 * scaleFactor));
 
+  // Use system fonts here (not the bundled NotoSans-Bold). The off-screen view
+  // for export captureRef must render reliably even before Font.loadAsync has
+  // finished, and we previously saw the summary disappear from exported
+  // videos when the captured view depended on a not-yet-loaded font.
   const textStyle = {
     color: config.textColor,
     fontFamily: config.fontFamily === "monospace" ? "monospace" : undefined,

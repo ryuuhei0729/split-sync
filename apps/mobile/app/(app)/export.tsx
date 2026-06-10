@@ -5,12 +5,20 @@ import type * as SharingType from "expo-sharing";
 import { useTranslation } from "react-i18next";
 import { useEditorStore } from "../../stores/editor-store";
 import { useAuth } from "../../contexts/AuthProvider";
-import { formatTime, getAvailableResolutions, shouldShowWatermark, checkIsPremium } from "@swimhub-timer/shared";
+import {
+  formatTime,
+  getAvailableResolutions,
+  shouldShowWatermark,
+  checkIsPremium,
+  SPLIT_DISPLAY_DURATION_SECONDS,
+} from "@swimhub-timer/shared";
 import type { ExportResolution } from "@swimhub-timer/shared";
 import {
   exportVideoWithStopwatch,
   saveToPhotoLibrary,
   cleanupExportFiles,
+  computeSummaryStartT,
+  type TimerSequenceInput,
 } from "../../lib/video/export-pipeline";
 import {
   createRewardedAdController,
@@ -25,7 +33,30 @@ import {
 } from "../../lib/guest-daily-limit";
 import { GuestExportIndicator } from "../../components/plan/GuestExportIndicator";
 import { FinishSummaryTable } from "../../components/splits/FinishSummaryTable";
-import { getStopwatchWrapperStyle } from "../../components/stopwatch/StopwatchOverlay";
+import {
+  getStopwatchWrapperStyle,
+  getMeasuredWrapperStyle,
+} from "../../components/stopwatch/StopwatchOverlay";
+
+// Phase 2 (design-skia-unified-renderer.md §4.2/§5): render the finish-summary
+// overlay with the shared Skia renderer instead of capturing the RN
+// FinishSummaryTable via react-native-view-shot. Keep this OFF until the Phase 0
+// native spike (skia-smoke.tsx) is GO *and* the live preview is swapped to
+// StopwatchSkiaOverlay — otherwise the Skia export would no longer match the
+// still-RN preview. When ON, a Skia failure transparently falls back to the
+// view-shot capture below, so flipping it can never produce a blank summary.
+const USE_SKIA_SUMMARY = true;
+
+// Phase 4 (design-skia-unified-renderer.md §4.2/§5): render the live timer (and
+// active split) as a Skia PNG sequence overlaid by FFmpeg, retiring `drawtext`
+// so the timer box height matches the preview exactly. Heaviest path (fps ×
+// window frames) — keep OFF until Phase 0 is GO, the preview is on
+// StopwatchSkiaOverlay, and the ffmpeg-fork's image2 demuxer is confirmed.
+// For a fully pixel-matched overlay also enable USE_SKIA_SUMMARY; otherwise the
+// summary still comes from the view-shot capture (functional, but not matched
+// to the Skia-rendered timer).
+const USE_SKIA_TIMER_SEQUENCE = true;
+const SKIA_TIMER_SEQUENCE_FPS = 30;
 
 // react-native-view-shot loaded lazily to avoid crashing in Expo Go
 function getCaptureRef() {
@@ -74,6 +105,10 @@ export default function ExportScreen() {
   // --- Summary PNG capture ref & URI ---
   const summaryViewRef = useRef<View>(null);
   const [capturedSummaryUri, setCapturedSummaryUri] = useState<string | null>(null);
+  const [captureSummaryLayout, setCaptureSummaryLayout] = useState<
+    { width: number; height: number } | null
+  >(null);
+  const summaryReadyRef = useRef(false);
 
   // --- Derived ---
   const exportComplete = outputPath !== null;
@@ -164,6 +199,43 @@ export default function ExportScreen() {
     }
   }, [effectivePlan]);
 
+  // Pre-capture the summary PNG once the off-screen wrapper has laid out and
+  // settled to pixel-based positioning. captureSummaryLayout becoming
+  // non-null is the signal that the wrapper re-rendered with absolute coords
+  // — the capture before that point would use the percentage/transform style
+  // that doesn't always survive view-shot's snapshot.
+  useEffect(() => {
+    // The Skia summary path renders headlessly at export time — no view-shot
+    // pre-capture needed (and capturing here would pre-fill capturedSummaryUri,
+    // shadowing the Skia render).
+    if (USE_SKIA_SUMMARY) return;
+    if (!isFinished || finishTime === null) return;
+    if (!captureSummaryLayout) return;
+    if (summaryReadyRef.current) return;
+    const handle = setTimeout(() => {
+      const captureRef = getCaptureRef();
+      if (!captureRef || !summaryViewRef.current) return;
+      captureRef(summaryViewRef, {
+        format: "png",
+        quality: 1.0,
+        width: videoWidth,
+        height: videoHeight,
+        // iOS-only: use renderInContext instead of the default
+        // drawViewHierarchyInRect. Recommended by the view-shot README when
+        // the default strategy returns a blank bitmap.
+        useRenderInContext: true,
+      })
+        .then((uri) => {
+          summaryReadyRef.current = true;
+          setCapturedSummaryUri(uri);
+        })
+        .catch(() => {
+          // Leave summaryReadyRef false so handleExport will try again.
+        });
+    }, 100);
+    return () => clearTimeout(handle);
+  }, [isFinished, finishTime, videoWidth, videoHeight, captureSummaryLayout]);
+
   const handleExport = useCallback(async () => {
     if (!videoUri || startTime === null) {
       Alert.alert(t("common.error"), t("exportScreen.needVideoAndStart"));
@@ -203,8 +275,39 @@ export default function ExportScreen() {
     }
 
     // --- Capture summary PNG (only when finished) ---
-    let summaryImageUri: string | null = null;
-    if (isFinished && finishTime !== null && summaryViewRef.current) {
+    // If pre-capture (on mount) already produced a URI, reuse it. Otherwise
+    // capture now. Pre-capture avoids the race where the off-screen view
+    // hadn't fully rendered by the time the user pressed the export button.
+    let summaryImageUri: string | null = capturedSummaryUri;
+
+    // Preferred path: render the summary headlessly with the shared Skia
+    // renderer (pixel-identical to the Skia preview). Lazily required so the
+    // Skia native module is only touched when the flag is on.
+    if (USE_SKIA_SUMMARY && isFinished && finishTime !== null) {
+      try {
+        const { renderFinishSummaryPng } =
+          require("../../lib/overlay/render-offscreen") as typeof import("../../lib/overlay/render-offscreen");
+        summaryImageUri = await renderFinishSummaryPng(
+          stopwatchConfig,
+          splitTimes,
+          finishTime,
+          raceDistance,
+          videoWidth,
+          videoHeight,
+        );
+        setCapturedSummaryUri(summaryImageUri);
+      } catch (e) {
+        // Fall through to the view-shot capture below.
+        console.warn("[export] Skia summary render failed; using view-shot", e);
+      }
+    }
+
+    if (
+      !summaryImageUri &&
+      isFinished &&
+      finishTime !== null &&
+      summaryViewRef.current
+    ) {
       try {
         const captureRef = getCaptureRef();
         if (captureRef) {
@@ -213,12 +316,95 @@ export default function ExportScreen() {
             quality: 1.0,
             width: videoWidth,
             height: videoHeight,
+            // Must match the pre-capture options (see effect above): without
+            // useRenderInContext the iOS default (drawViewHierarchyInRect)
+            // bakes the wrapper's near-zero opacity into the bitmap, so the
+            // summary overlay ends up invisible in the exported video.
+            useRenderInContext: true,
           });
           setCapturedSummaryUri(summaryImageUri);
         }
-      } catch {
-        // PNG capture failed — export without summary overlay
+      } catch (e) {
+        // PNG capture failed — export without summary overlay, but surface it
+        // so a blank summary in the output isn't silently mistaken for "works".
+        console.warn("[export] summary PNG capture failed", e);
         summaryImageUri = null;
+      }
+    }
+
+    // --- Pre-render the Skia timer PNG sequence (Phase 4, flag-gated) ---
+    // Frames are rendered at native video resolution with the unscaled config;
+    // the export filtergraph scales them to the output resolution.
+    let timerSequence: TimerSequenceInput | null = null;
+    let timerSequenceDir: string | null = null;
+    if (USE_SKIA_TIMER_SEQUENCE && startTime !== null) {
+      try {
+        const summaryStartAbs =
+          isFinished && finishTime !== null
+            ? computeSummaryStartT(startTime, finishTime, duration)
+            : null;
+        const endAbs = summaryStartAbs ?? duration;
+        // Render over VIDEO time [0, endAbs] so the timer shows 0:00 from the
+        // very start of the clip (matching the preview), freezes at finishTime,
+        // and hides when the summary appears. elapsed = max(0, t - startTime).
+        if (endAbs > 0) {
+          const sortedSplits = [...splitTimes].sort((a, b) => a.time - b.time);
+          const elapsedFor = (videoSec: number) => {
+            const e = Math.max(0, videoSec - startTime);
+            return isFinished && finishTime !== null ? Math.min(e, finishTime) : e;
+          };
+          const activeSplitAt = (elapsed: number) => {
+            const cap =
+              isFinished && finishTime !== null ? Math.min(elapsed, finishTime) : elapsed;
+            for (let i = sortedSplits.length - 1; i >= 0; i--) {
+              const s = sortedSplits[i];
+              if (isFinished && finishTime !== null && raceDistance !== null) {
+                if (s.distance === raceDistance && s.time === finishTime) continue;
+              }
+              if (cap >= s.time && cap < s.time + SPLIT_DISPLAY_DURATION_SECONDS) return s;
+            }
+            return null;
+          };
+          const { renderTimerSequence } =
+            require("../../lib/overlay/render-offscreen") as typeof import("../../lib/overlay/render-offscreen");
+          const seq = await renderTimerSequence({
+            config: stopwatchConfig,
+            startSec: 0,
+            endSec: endAbs,
+            fps: SKIA_TIMER_SEQUENCE_FPS,
+            width: videoWidth,
+            height: videoHeight,
+            elapsedFor,
+            activeSplitAt,
+            watermarkIcon: null, // watermark stays a separate FFmpeg overlay
+          });
+          timerSequenceDir = seq.dir;
+          timerSequence = {
+            pattern: seq.pattern,
+            fps: seq.fps,
+            startT: 0, // frame 0 = video time 0
+            endT: endAbs,
+            region: seq.region,
+          };
+        }
+      } catch (e) {
+        // Fall back to the drawtext timer path.
+        console.warn("[export] Skia timer sequence render failed; using drawtext", e);
+        timerSequence = null;
+      }
+    }
+
+    // --- Render the watermark with Skia (pixel-identical to the preview) ---
+    let watermarkImageUri: string | null = null;
+    if (USE_SKIA_SUMMARY && showWatermark) {
+      try {
+        const { renderWatermarkPng } =
+          require("../../lib/overlay/render-offscreen") as typeof import("../../lib/overlay/render-offscreen");
+        watermarkImageUri = await renderWatermarkPng(videoWidth, videoHeight);
+      } catch (e) {
+        // Fall back to the FFmpeg drawtext watermark.
+        console.warn("[export] Skia watermark render failed; using drawtext", e);
+        watermarkImageUri = null;
       }
     }
 
@@ -242,6 +428,9 @@ export default function ExportScreen() {
         summaryImageUri,
         splitTimes,
         raceDistance,
+        duration,
+        timerSequence,
+        watermarkImageUri,
       );
       setOutputPath(path);
       setProgress(1);
@@ -253,6 +442,15 @@ export default function ExportScreen() {
       setError(e instanceof Error ? e.message : t("exportScreen.errorDuringExport"));
     } finally {
       setIsExporting(false);
+      if (timerSequenceDir) {
+        try {
+          const { deleteTimerSequence } =
+            require("../../lib/overlay/render-offscreen") as typeof import("../../lib/overlay/render-offscreen");
+          deleteTimerSequence(timerSequenceDir);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
     }
   }, [
     videoUri,
@@ -272,6 +470,7 @@ export default function ExportScreen() {
     videoHeight,
     splitTimes,
     raceDistance,
+    capturedSummaryUri,
     t,
   ]);
 
@@ -305,15 +504,35 @@ export default function ExportScreen() {
 
   const progressPercent = Math.round(progress * 100);
 
-  const showSummaryCapture = isFinished && finishTime !== null;
+  // The hidden view-shot capture view is only needed for the legacy (non-Skia)
+  // summary path; with USE_SKIA_SUMMARY the summary is rendered headlessly, so
+  // skip mounting the large off-screen view (avoids needless re-renders).
+  const showSummaryCapture = !USE_SKIA_SUMMARY && isFinished && finishTime !== null;
+
+  // Measured size of the inner summary table — used to position the wrapper
+  // with absolute pixels instead of a `transform: translate(-50%, -50%)`
+  // (which on iOS/Android sometimes isn't picked up by view-shot, so the
+  // capture would be empty/clipped → no summary in the exported video).
+  const captureWrapperStyle = captureSummaryLayout
+    ? getMeasuredWrapperStyle(
+        stopwatchConfig.summaryPosition,
+        stopwatchConfig.summaryAnchor,
+        videoWidth,
+        videoHeight,
+        captureSummaryLayout,
+      )
+    : getStopwatchWrapperStyle(
+        stopwatchConfig.summaryPosition,
+        stopwatchConfig.summaryAnchor,
+      );
 
   return (
     <View style={styles.container}>
-      {/* Hidden summary view for PNG capture — rendered off-screen at video resolution.
-          The outer View (summaryCapture) is sized to videoWidth × videoHeight.
-          The inner View (summaryCaptureInner) mirrors StopwatchOverlay.summaryWrapper:
-            position: "absolute", top: "55%", left: 0, right: 0, alignItems: "center"
-          This produces the same pixel position in the PNG as seen in the preview. */}
+      {/* Hidden summary view for PNG capture — rendered on-screen but at
+          near-zero opacity. Off-screen (top:-100000) was unreliable on
+          recent iOS/RN versions: view-shot would return an empty bitmap.
+          collapsable={false} keeps Android's view manager from
+          short-circuiting it. */}
       {showSummaryCapture && (
         <View
           ref={summaryViewRef}
@@ -322,12 +541,19 @@ export default function ExportScreen() {
             { width: videoWidth, height: videoHeight },
           ]}
           pointerEvents="none"
+          collapsable={false}
         >
           <View
-            style={getStopwatchWrapperStyle(
-              stopwatchConfig.summaryPosition,
-              stopwatchConfig.summaryAnchor,
-            )}
+            style={captureWrapperStyle}
+            collapsable={false}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              setCaptureSummaryLayout((prev) =>
+                prev && prev.width === width && prev.height === height
+                  ? prev
+                  : { width, height },
+              );
+            }}
           >
             <FinishSummaryTable
               splitTimes={splitTimes}
@@ -480,16 +706,17 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xl,
   },
-  // Off-screen hidden view for summary PNG capture.
-  // Sized to videoWidth × videoHeight so captureRef produces a 1:1 PNG that aligns
-  // pixel-perfect with the output frame. We push it off-screen via top/left rather
-  // than using opacity: 0 — react-native-view-shot captures a transparent (empty)
-  // bitmap when the source view's effective alpha is 0, which is why the summary
-  // was previously missing from exported videos.
+  // Hidden view for summary PNG capture, sized to videoWidth × videoHeight so
+  // captureRef produces a 1:1 PNG with the output frame. We render at
+  // (0, 0) with near-zero opacity — *not* opacity:0, which view-shot
+  // sometimes reads as a fully-transparent bitmap; and *not* far-off-screen
+  // (top:-100000), which view-shot has stopped capturing reliably on recent
+  // RN/iOS combinations.
   summaryCapture: {
     position: "absolute",
-    top: -100000,
-    left: -100000,
+    top: 0,
+    left: 0,
+    opacity: 0.01,
   },
   summaryCard: {
     backgroundColor: colors.surface,

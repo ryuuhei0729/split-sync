@@ -5,8 +5,31 @@ import type {
   SplitTime,
   VideoMetadata,
   ExportSettings,
+  Rect,
 } from "@swimhub-timer/shared";
-import { DEFAULT_STOPWATCH_CONFIG } from "@swimhub-timer/shared";
+import { STOPWATCH_PRESETS } from "@swimhub-timer/shared";
+
+const MOBILE_BASE_PRESET =
+  STOPWATCH_PRESETS.find((p) => p.id === "minimal-white") ?? STOPWATCH_PRESETS[0];
+
+// Mobile is locked to the minimal-white preset, but with a slightly darker
+// backdrop so the timer reads cleanly over light pool footage.
+// borderRadius is 0 so the preview matches the FFmpeg drawtext box, which is
+// always square — fixing the rounded-vs-square mismatch.
+/**
+ * Default summary-table scale on mobile. The shared base font (13px @ native
+ * video resolution) is tiny next to the ~130px timer, so the summary needs a
+ * multiplier to read well by default. (Adjust to taste.)
+ */
+export const MOBILE_DEFAULT_SUMMARY_SCALE = 5;
+
+export const MOBILE_DEFAULT_STOPWATCH_CONFIG: StopwatchConfig = {
+  ...MOBILE_BASE_PRESET.config,
+  backgroundColor: "rgba(0,0,0,0.6)",
+  anchor: "bottom-left",
+  borderRadius: 0,
+  summaryScale: MOBILE_DEFAULT_SUMMARY_SCALE,
+};
 
 interface AudioData {
   pcmData: Float32Array;
@@ -45,6 +68,23 @@ interface EditorState {
   finishMemo: string;
   designConfirmed: boolean;
 
+  // Which overlay element is currently being edited in the preview. Shared so
+  // the Skia preview (StopwatchSkiaOverlay) can defer to the RN editing chrome
+  // for the element under edit (keeps the selection frame aligned with the
+  // glyphs), while drawing the rest WYSIWYG.
+  timerEditing: boolean;
+  summaryEditing: boolean;
+  setTimerEditing: (editing: boolean) => void;
+  setSummaryEditing: (editing: boolean) => void;
+
+  // Screen-space bounds (relative to the overlay root) of the timer/summary as
+  // drawn by the Skia preview. The RN gesture layer positions its hit areas +
+  // selection frame from these so editing chrome is glued to the Skia glyphs
+  // and preview == export (single geometry: shared calculatePosition).
+  timerPreviewBounds: Rect | null;
+  summaryPreviewBounds: Rect | null;
+  setPreviewBounds: (bounds: { timer: Rect | null; summary: Rect | null }) => void;
+
   setStep: (step: EditorStep) => void;
   setVideoUri: (uri: string) => void;
   clearVideo: () => void;
@@ -80,7 +120,7 @@ const initialState = {
   detectedSignalTime: null as number | null,
   startTime: null as number | null,
   isDetecting: false,
-  stopwatchConfig: { ...DEFAULT_STOPWATCH_CONFIG },
+  stopwatchConfig: { ...MOBILE_DEFAULT_STOPWATCH_CONFIG },
   exportSettings: { resolution: "1080" as const },
   exportProgress: 0,
   isExporting: false,
@@ -95,6 +135,10 @@ const initialState = {
   finishTime: null as number | null,
   finishMemo: "",
   designConfirmed: false,
+  timerEditing: false,
+  summaryEditing: false,
+  timerPreviewBounds: null as Rect | null,
+  summaryPreviewBounds: null as Rect | null,
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -143,6 +187,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setCurrentMemoInput: (value) => set({ currentMemoInput: value }),
   setRaceDistance: (distance) => set({ raceDistance: distance }),
   setDesignConfirmed: (confirmed) => set({ designConfirmed: confirmed }),
+  setTimerEditing: (editing) => set({ timerEditing: editing }),
+  setSummaryEditing: (editing) => set({ summaryEditing: editing }),
+  setPreviewBounds: ({ timer, summary }) =>
+    set({ timerPreviewBounds: timer, summaryPreviewBounds: summary }),
 
   recordSplit: (elapsedSeconds) => {
     const { currentDistanceInput, currentMemoInput, splitTimes } = get();

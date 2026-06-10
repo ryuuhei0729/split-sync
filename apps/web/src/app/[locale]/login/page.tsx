@@ -212,12 +212,14 @@ export default function LoginPage() {
         <div className="text-center flex flex-col items-center">
           <SwimHubTimerIcon className="w-28 h-28 mx-auto mb-4" />
           <h2 className="text-xl sm:text-2xl font-extrabold text-foreground mb-2">
-            {t("common.appName")}
+            {isSignUp ? t("auth.signUp") : t("common.appName")}
           </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground">{t("import.subtitle")}</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {isSignUp ? t("auth.createAccount") : t("import.subtitle")}
+          </p>
         </div>
 
-        {error && (
+        {error && !confirmationSent && (
           <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
             <div className="flex items-start">
               <svg
@@ -236,7 +238,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {confirmationSent && (
+        {confirmationSent ? (
           <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
             <div className="flex items-start">
               <svg
@@ -250,11 +252,28 @@ export default function LoginPage() {
                   clipRule="evenodd"
                 />
               </svg>
-              <div className="text-sm leading-relaxed">{t("auth.confirmationSent")}</div>
+              <div>
+                <p className="font-medium">{t("auth.confirmEmailSent")}</p>
+                <p className="mt-1 text-sm">{t("auth.confirmEmailDesc")}</p>
+              </div>
             </div>
+            <button
+              type="button"
+              className="mt-3 text-sm text-primary underline hover:text-primary/80"
+              onClick={() => {
+                setConfirmationSent(false);
+                setIsSignUp(false);
+                setError(null);
+                setName("");
+                setEmail("");
+                setPassword("");
+              }}
+            >
+              {t("auth.backToLogin")}
+            </button>
           </div>
-        )}
-
+        ) : (
+        <>
         <div className="space-y-3">
           <button
             type="button"
@@ -374,6 +393,8 @@ export default function LoginPage() {
         >
           {t("auth.continueAsGuest")}
         </button>
+        </>
+        )}
 
         <p className="text-center text-xs text-muted-foreground">
           {(() => {

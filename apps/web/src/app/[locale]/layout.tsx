@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { I18nProvider } from "@/components/I18nProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { KeyboardScrollProvider } from "@/components/keyboard/KeyboardScrollProvider";
-import { supportedLocales, i18nResources, type SupportedLocale } from "@swimhub-timer/i18n";
+import { supportedLocales, i18nResources, isSupportedLocale, type SupportedLocale } from "@swimhub-timer/i18n";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -15,10 +15,6 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
-function isSupportedLocale(locale: string): locale is SupportedLocale {
-  return (supportedLocales as readonly string[]).includes(locale);
-}
 
 const siteUrl = "https://timer.swim-hub.app";
 
@@ -44,6 +40,7 @@ export async function generateMetadata({
       languages: {
         ja: "/ja",
         en: "/en",
+        "x-default": "/ja",
       },
     },
     keywords: [...t.meta.keywords],

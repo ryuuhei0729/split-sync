@@ -69,11 +69,24 @@ export function SignalDetector({ onConfirm }: SignalDetectorProps) {
     setIsDetecting(true);
     setError(null);
 
-    // Wait for modal to render before running synchronous detection
-    await new Promise((r) => setTimeout(r, 300));
+    // Yield once so the loading modal commits to native before the synchronous
+    // FFT pass blocks the JS thread. Matches the web flow's microtask flush.
+    await new Promise<void>((r) => setTimeout(r, 0));
 
     try {
-      const result = detectStartSignal(audioData);
+      // Race start happens early — analyzing only the first 30s keeps Hermes's
+      // FFT work bounded on long clips.
+      const ANALYSIS_WINDOW_SEC = 30;
+      const maxSamples = Math.floor(ANALYSIS_WINDOW_SEC * audioData.sampleRate);
+      const target =
+        audioData.pcmData.length > maxSamples
+          ? {
+              ...audioData,
+              pcmData: audioData.pcmData.subarray(0, maxSamples),
+              duration: ANALYSIS_WINDOW_SEC,
+            }
+          : audioData;
+      const result = detectStartSignal(target);
       if (result) {
         setDetectedSignalTime(result.time);
         seekVideoAndPause(result.time);
@@ -126,19 +139,16 @@ export function SignalDetector({ onConfirm }: SignalDetectorProps) {
         </View>
       </Modal>
 
-      {/* Waveform (always visible once extracted) */}
-      {waveformData && audioData && (
-        <WaveformDisplay
-          waveformData={waveformData}
-          duration={audioData.duration}
-          signalTime={detectedSignalTime ?? -1}
-          currentTime={currentVideoTime}
-          onSeek={onWaveformSeek}
-        />
-      )}
-
-      {/* Auto detect button */}
-      {!isConfirmed && !isDetecting && audioData && (
+      {/* 1. Auto detect button (or confirmed status when locked in) */}
+      {isConfirmed ? (
+        <View style={styles.statusCard}>
+          <Text style={styles.statusLabel}>{t("signal.confirmedTime")}</Text>
+          <Text style={styles.statusTime}>{formatTime(startTime)}</Text>
+          <Pressable style={styles.resetBtn} onPress={() => setStartTime(null)}>
+            <Text style={styles.resetBtnText}>{t("signal.change")}</Text>
+          </Pressable>
+        </View>
+      ) : !isDetecting && audioData ? (
         <Pressable
           style={({ pressed }) => [styles.autoDetectBtn, pressed && styles.autoDetectBtnPressed]}
           onPress={runAutoDetect}
@@ -149,7 +159,7 @@ export function SignalDetector({ onConfirm }: SignalDetectorProps) {
             <Text style={styles.autoDetectBtnSub}>{t("signal.autoDetectDesc")}</Text>
           </View>
         </Pressable>
-      )}
+      ) : null}
 
       {/* Error */}
       {error && (
@@ -158,27 +168,18 @@ export function SignalDetector({ onConfirm }: SignalDetectorProps) {
         </View>
       )}
 
-      {/* Status */}
-      <View style={styles.statusCard}>
-        {isConfirmed ? (
-          <>
-            <Text style={styles.statusLabel}>{t("signal.confirmedTime")}</Text>
-            <Text style={styles.statusTime}>{formatTime(startTime)}</Text>
-            <Pressable style={styles.resetBtn} onPress={() => setStartTime(null)}>
-              <Text style={styles.resetBtnText}>{t("signal.change")}</Text>
-            </Pressable>
-          </>
-        ) : detectedSignalTime !== null ? (
-          <>
-            <Text style={styles.statusLabel}>{t("signal.candidateTime")}</Text>
-            <Text style={styles.statusTime}>{formatTime(detectedSignalTime)}</Text>
-          </>
-        ) : (
-          <Text style={styles.statusHint}>{t("signal.hintText")}</Text>
-        )}
-      </View>
+      {/* 2. Waveform */}
+      {waveformData && audioData && (
+        <WaveformDisplay
+          waveformData={waveformData}
+          duration={audioData.duration}
+          signalTime={detectedSignalTime ?? -1}
+          currentTime={currentVideoTime}
+          onSeek={onWaveformSeek}
+        />
+      )}
 
-      {/* Fine-tune + confirm */}
+      {/* 3. Fine-tune */}
       {!isConfirmed && detectedSignalTime !== null && (
         <View style={styles.tuneSection}>
           <Text style={styles.tuneLabel}>{t("signal.fineTune")}</Text>
@@ -194,7 +195,14 @@ export function SignalDetector({ onConfirm }: SignalDetectorProps) {
               </Pressable>
             ))}
           </View>
+        </View>
+      )}
 
+      {/* 4. Candidate time + confirm */}
+      {!isConfirmed && detectedSignalTime !== null && (
+        <View style={styles.statusCard}>
+          <Text style={styles.statusLabel}>{t("signal.candidateTime")}</Text>
+          <Text style={styles.statusTime}>{formatTime(detectedSignalTime)}</Text>
           <Pressable style={styles.confirmBtn} onPress={confirmStart}>
             <Text style={styles.confirmBtnText}>{t("signal.setAsStartPoint")}</Text>
           </Pressable>
@@ -286,12 +294,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.primary,
   },
-  statusHint: {
-    fontSize: fontSize.sm,
-    color: colors.muted,
-    textAlign: "center",
-    lineHeight: 20,
-  },
   resetBtn: {
     marginTop: spacing.xs,
   },
@@ -332,6 +334,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: 14,
     alignItems: "center",
+    alignSelf: "stretch",
+    marginTop: spacing.sm,
   },
   confirmBtnText: {
     fontSize: 15,
