@@ -12,6 +12,7 @@ const en: TranslationShape = {
     cancel: "Cancel",
     new: "New",
     close: "Close",
+    language: "Language",
   },
 
   meta: {

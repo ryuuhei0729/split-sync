@@ -10,6 +10,7 @@ const ja = {
     cancel: "キャンセル",
     new: "新規",
     close: "閉じる",
+    language: "言語",
   },
 
   meta: {

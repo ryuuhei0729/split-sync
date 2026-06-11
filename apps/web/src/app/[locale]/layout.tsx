@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Noto_Sans_JP, Noto_Sans_KR, Noto_Sans_SC } from "next/font/google";
 import { notFound } from "next/navigation";
 import { I18nProvider } from "@/components/I18nProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
@@ -14,6 +14,30 @@ const inter = Inter({
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// 日本語 / 韓国語 (ハングル) / 簡体字中国語のグリフ用。
+// globals.css の base --font-sans (ja) と html:lang(ko) / html:lang(zh) でそれぞれ優先する。
+// preload: false — :lang() で条件適用のため全ユーザーへの preload は不要
+const notoSansJP = Noto_Sans_JP({
+  subsets: ["latin"],
+  variable: "--font-noto-sans-jp",
+  weight: ["400", "500", "700"],
+  preload: false,
+});
+
+const notoSansKR = Noto_Sans_KR({
+  subsets: ["latin"],
+  variable: "--font-noto-sans-kr",
+  weight: ["400", "500", "700"],
+  preload: false,
+});
+
+const notoSansSC = Noto_Sans_SC({
+  subsets: ["latin"],
+  variable: "--font-noto-sans-sc",
+  weight: ["400", "500", "700"],
+  preload: false,
 });
 
 const siteUrl = "https://timer.swim-hub.app";
@@ -38,8 +62,7 @@ export async function generateMetadata({
     alternates: {
       canonical: `/${locale}`,
       languages: {
-        ja: "/ja",
-        en: "/en",
+        ...Object.fromEntries(supportedLocales.map((l) => [l, `/${l}`])),
         "x-default": "/ja",
       },
     },
@@ -115,7 +138,9 @@ export default async function LocaleLayout({
 
   return (
     <html lang={locale} className="h-full">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}>
+      <body
+        className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansJP.variable} ${notoSansKR.variable} ${notoSansSC.variable} h-full antialiased`}
+      >
         <I18nProvider locale={locale}>
           <AuthProvider>
             <KeyboardScrollProvider>
