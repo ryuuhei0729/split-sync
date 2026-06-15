@@ -6,7 +6,7 @@
  *   [Y-4] @swimhub-timer/i18n から isSupportedLocale が import できる
  *
  * isSupportedLocale の仕様:
- *   - "ja" / "en" / "ko" / "zh" → true
+ *   - "ja" / "en" / "ko" / "zh" / "de" → true
  *   - それ以外の文字列 / 大文字 / 空文字 / null / undefined / 数値 → false
  *   - region タグ付き ("zh-CN" 等) → false (languageCode 単体のみ対応)
  *   - TypeScript 型ガード (value is SupportedLocale) として機能する
@@ -35,6 +35,9 @@ describe("isSupportedLocale", () => {
     });
     it('isSupportedLocale("zh") → true', () => {
       expect(isSupportedLocale("zh")).toBe(true);
+    });
+    it('isSupportedLocale("de") → true', () => {
+      expect(isSupportedLocale("de")).toBe(true);
     });
   });
 
