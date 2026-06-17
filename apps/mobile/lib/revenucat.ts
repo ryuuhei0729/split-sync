@@ -1,6 +1,8 @@
 /**
  * RevenueCat SDK ラッパー
- * iOS のみ対応。Android は全操作をスキップする。
+ * iOS は App Store (appl_ キー)、Android は Google Play (goog_ キー) を使用する。
+ * プラットフォームに対応する有効なAPIキーが設定されている場合のみ初期化する。
+ * キー未設定（または無効）の場合は全操作を no-op とし、課金UIを無効化する。
  */
 import { Platform } from "react-native";
 import Purchases, {
@@ -9,30 +11,37 @@ import Purchases, {
   type PurchasesOfferings,
 } from "react-native-purchases";
 
-const REVENUCAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUCAT_IOS_API_KEY ?? "";
+const API_KEY = Platform.select({
+  ios: process.env.EXPO_PUBLIC_REVENUCAT_IOS_API_KEY ?? "",
+  android: process.env.EXPO_PUBLIC_REVENUCAT_ANDROID_API_KEY ?? "",
+  default: "",
+});
+const EXPECTED_PREFIX = Platform.select({ ios: "appl_", android: "goog_", default: "" });
 
-/** iOS かどうか */
-const isIOS = Platform.OS === "ios";
+const isValidApiKey =
+  !!API_KEY && !!EXPECTED_PREFIX && API_KEY.startsWith(EXPECTED_PREFIX);
 
-/**
- * RevenueCat SDK を初期化する
- * iOS 以外では何もしない
- */
+let isInitialized = false;
+
+/** SDK を初期化する（対応プラットフォームの有効なAPIキーがある場合のみ） */
 export async function initRevenueCat(): Promise<void> {
-  if (!isIOS) return;
-  if (!REVENUCAT_IOS_API_KEY) {
-    console.warn("[RevenueCat] EXPO_PUBLIC_REVENUCAT_IOS_API_KEY が未設定です");
+  if (isInitialized) return;
+  if (!isValidApiKey) {
+    console.log(`[RevenueCat] ${Platform.OS} 用APIキー未設定のため初期化をスキップします`);
     return;
   }
 
-  Purchases.configure({ apiKey: REVENUCAT_IOS_API_KEY });
+  try {
+    Purchases.configure({ apiKey: API_KEY! });
+    isInitialized = true;
+  } catch (err) {
+    console.error("[RevenueCat] 初期化エラー:", err);
+  }
 }
 
-/**
- * Supabase user.id で RevenueCat にログインする
- */
+/** Supabase user.id で RevenueCat にログインする */
 export async function loginRevenueCat(userId: string): Promise<void> {
-  if (!isIOS || !REVENUCAT_IOS_API_KEY) return;
+  if (!isInitialized) return;
   try {
     await Purchases.logIn(userId);
   } catch (error) {
@@ -40,11 +49,9 @@ export async function loginRevenueCat(userId: string): Promise<void> {
   }
 }
 
-/**
- * RevenueCat からログアウトする
- */
+/** RevenueCat からログアウトする */
 export async function logoutRevenueCat(): Promise<void> {
-  if (!isIOS || !REVENUCAT_IOS_API_KEY) return;
+  if (!isInitialized) return;
   try {
     await Purchases.logOut();
   } catch (error) {
@@ -52,11 +59,9 @@ export async function logoutRevenueCat(): Promise<void> {
   }
 }
 
-/**
- * 利用可能なオファリングを取得する
- */
+/** 利用可能なオファリングを取得する */
 export async function getOfferings(): Promise<PurchasesOfferings | null> {
-  if (!isIOS || !REVENUCAT_IOS_API_KEY) return null;
+  if (!isInitialized) return null;
   try {
     const offerings = await Purchases.getOfferings();
     return offerings;
@@ -66,34 +71,26 @@ export async function getOfferings(): Promise<PurchasesOfferings | null> {
   }
 }
 
-/**
- * パッケージを購入する
- */
+/** パッケージを購入する */
 export async function purchasePackage(
   pkg: PurchasesPackage,
 ): Promise<CustomerInfo | null> {
-  if (!isIOS) return null;
+  if (!isInitialized) return null;
   try {
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     return customerInfo;
-  } catch (error: unknown) {
-    // ユーザーキャンセルの場合はエラーを投げない
-    if (
-      error instanceof Object &&
-      "userCancelled" in error &&
-      (error as { userCancelled: boolean }).userCancelled
-    ) {
+  } catch (err: unknown) {
+    // ユーザーがキャンセルした場合はエラーとして扱わない
+    if (err && typeof err === "object" && "userCancelled" in err && err.userCancelled) {
       return null;
     }
-    throw error;
+    throw err;
   }
 }
 
-/**
- * 購入をリストアする
- */
+/** 購入をリストアする */
 export async function restorePurchases(): Promise<CustomerInfo | null> {
-  if (!isIOS || !REVENUCAT_IOS_API_KEY) return null;
+  if (!isInitialized) return null;
   try {
     const customerInfo = await Purchases.restorePurchases();
     return customerInfo;
@@ -103,11 +100,9 @@ export async function restorePurchases(): Promise<CustomerInfo | null> {
   }
 }
 
-/**
- * 顧客情報を取得する
- */
+/** 顧客情報を取得する */
 export async function getCustomerInfo(): Promise<CustomerInfo | null> {
-  if (!isIOS || !REVENUCAT_IOS_API_KEY) return null;
+  if (!isInitialized) return null;
   try {
     const customerInfo = await Purchases.getCustomerInfo();
     return customerInfo;
@@ -117,14 +112,16 @@ export async function getCustomerInfo(): Promise<CustomerInfo | null> {
   }
 }
 
-/**
- * 顧客情報の変更リスナーを登録する
- * @returns リスナー解除関数
- */
+/** 顧客情報の変更リスナーを登録する。クリーンアップ用の関数を返す */
 export function addCustomerInfoUpdateListener(
   listener: (info: CustomerInfo) => void,
 ): () => void {
-  if (!isIOS || !REVENUCAT_IOS_API_KEY) return () => {};
-  const remove = Purchases.addCustomerInfoUpdateListener(listener);
-  return typeof remove === "function" ? remove : () => {};
+  if (!isInitialized) {
+    return () => {};
+  }
+
+  Purchases.addCustomerInfoUpdateListener(listener);
+  return () => {
+    Purchases.removeCustomerInfoUpdateListener(listener);
+  };
 }

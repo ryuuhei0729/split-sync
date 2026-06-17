@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, Dimensions } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, Dimensions, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import type * as SharingType from "expo-sharing";
 import { useTranslation } from "react-i18next";
@@ -490,7 +490,7 @@ export default function ExportScreen() {
       const Sharing = require("expo-sharing") as typeof SharingType;
       await Sharing.shareAsync(outputPath, {
         mimeType: "video/mp4",
-        UTI: "public.mpeg-4",
+        ...(Platform.OS === "ios" ? { UTI: "public.mpeg-4" } : {}),
       });
     } catch {
       // User cancelled share sheet
