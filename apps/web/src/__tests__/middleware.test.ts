@@ -127,6 +127,14 @@ describe("timer middleware — セキュリティヘッダー", () => {
       expect(csp).toContain("blob:");
     });
 
+    it("connect-src に blob: が含まれる (FFmpeg WASM ワーカーが blob から Fetch)", async () => {
+      const { middleware } = await import("../middleware");
+      const res = await middleware(makeGetRequest("/ja"));
+      const csp = res.headers.get("Content-Security-Policy") ?? "";
+      const connectSrc = csp.split(";").find((d) => d.trim().startsWith("connect-src")) ?? "";
+      expect(connectSrc).toContain("blob:");
+    });
+
     it("connect-src に R2 CDN URL が含まれる (FFmpeg WASM アセット)", async () => {
       const { middleware } = await import("../middleware");
       const res = await middleware(makeGetRequest("/ja"));
