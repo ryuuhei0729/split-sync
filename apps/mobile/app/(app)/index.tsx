@@ -45,7 +45,11 @@ export default function ImportScreen() {
             FileSystemLegacy.deleteAsync(prevTempUriRef.current, { idempotent: true }).catch(() => {});
             prevTempUriRef.current = null;
           }
-          const cache = FileSystemLegacy.cacheDirectory ?? "";
+          const cache = FileSystemLegacy.cacheDirectory;
+          if (!cache) {
+            // cacheDirectory が取れないと相対パスになり copyAsync が不可解なエラーで落ちるため明示的に失敗させる
+            throw new Error("Cache directory unavailable");
+          }
           const dest = `${cache}video-import-${Date.now()}.mp4`;
           await FileSystemLegacy.copyAsync({ from: asset.uri, to: dest });
           prevTempUriRef.current = dest;

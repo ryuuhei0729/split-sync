@@ -137,10 +137,11 @@ export default async function LocaleLayout({
   };
 
   return (
-    <html lang={locale} className="h-full">
-      <body
-        className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansJP.variable} ${notoSansKR.variable} ${notoSansSC.variable} h-full antialiased`}
-      >
+    <html
+      lang={locale}
+      className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansJP.variable} ${notoSansKR.variable} ${notoSansSC.variable} h-full`}
+    >
+      <body className="h-full antialiased">
         <I18nProvider locale={locale}>
           <AuthProvider>
             <KeyboardScrollProvider>
