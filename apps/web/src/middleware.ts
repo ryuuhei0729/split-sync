@@ -31,8 +31,9 @@ const FFMPEG_ORIGIN = (() => {
 // CSP (Issue #17) — timer は FFmpeg WASM 用に wasm-unsafe-eval / worker-src blob: / R2 を許可
 const CSP = [
   "default-src 'self'",
-  // blob: は FFmpeg WASM (マルチスレッド版) が core/worker を blob URL のスクリプトとしてロードするため必須
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:",
+  // blob: は FFmpeg WASM が core を blob URL のスクリプトとしてロードするため必須
+  // static.cloudflareinsights.com は Cloudflare Web Analytics のビーコンスクリプト
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.supabase.co",
   "media-src 'self' blob:",
@@ -45,6 +46,8 @@ const CSP = [
     "https://*.supabase.co",
     "wss://*.supabase.co",
     "https://api.stripe.com",
+    // Cloudflare Web Analytics のビーコン送信先
+    "https://cloudflareinsights.com",
     FFMPEG_ORIGIN,
   ]
     .filter(Boolean)
