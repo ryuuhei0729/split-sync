@@ -111,6 +111,14 @@ describe("timer middleware — セキュリティヘッダー", () => {
       expect(csp).toContain("'unsafe-inline'");
     });
 
+    it("script-src に blob: が含まれる (FFmpeg WASM core/worker を blob スクリプトでロード)", async () => {
+      const { middleware } = await import("../middleware");
+      const res = await middleware(makeGetRequest("/ja"));
+      const csp = res.headers.get("Content-Security-Policy") ?? "";
+      const scriptSrc = csp.split(";").find((d) => d.trim().startsWith("script-src")) ?? "";
+      expect(scriptSrc).toContain("blob:");
+    });
+
     it("worker-src 'self' blob: が含まれる (FFmpeg WASM 必須)", async () => {
       const { middleware } = await import("../middleware");
       const res = await middleware(makeGetRequest("/ja"));

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { supportedLocales, defaultLocale } from "@swimhub-timer/i18n";
+import { defaultLocale } from "@swimhub-timer/i18n";
 
 /**
  * redirectToパラメータを検証・サニタイズする
@@ -67,38 +67,11 @@ function validateRedirectPath(redirectTo: string | null, origin?: string, locale
   return decoded;
 }
 
-function resolveLocale(request: NextRequest): string {
-  // 1. Check OAuth state parameter
-  const state = new URL(request.url).searchParams.get("state");
-  if (state && (supportedLocales as readonly string[]).includes(state)) {
-    return state;
-  }
-
-  // 2. Check locale cookie
-  const localeCookie = request.cookies.get("NEXT_LOCALE")?.value;
-  if (localeCookie && (supportedLocales as readonly string[]).includes(localeCookie)) {
-    return localeCookie;
-  }
-
-  // 3. Check Accept-Language header
-  const acceptLang = request.headers.get("Accept-Language");
-  if (acceptLang) {
-    const preferred = acceptLang
-      .split(",")
-      .map((part) => part.split(";")[0].trim().substring(0, 2).toLowerCase())
-      .find((lang) => (supportedLocales as readonly string[]).includes(lang));
-    if (preferred) {
-      return preferred;
-    }
-  }
-
-  return defaultLocale;
-}
-
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const locale = resolveLocale(request);
+  // ブラウザ言語検出 / cookie 永続化は行わず、scanner・swim-hub と同様にデフォルトロケールへ。
+  const locale = defaultLocale;
   const redirectTo = validateRedirectPath(
     requestUrl.searchParams.get("redirect_to"),
     requestUrl.origin,

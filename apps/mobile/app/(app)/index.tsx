@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
+import React, { useRef, useState } from "react";
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +17,7 @@ export default function ImportScreen() {
   const { setVideoUri, setVideoMetadata, reset } = useEditorStore();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const prevTempUriRef = useRef<string | null>(null);
 
   const pickVideo = async () => {
     try {
@@ -34,7 +35,32 @@ export default function ImportScreen() {
 
       const asset = result.assets[0];
       reset();
-      setVideoUri(asset.uri);
+
+      let resolvedUri = asset.uri;
+      if (Platform.OS === "android" && asset.uri.startsWith("content://")) {
+        try {
+          const FileSystemLegacy = await import("expo-file-system/legacy");
+          // 前回の一時ファイルを削除してキャッシュが肥大しないようにする
+          if (prevTempUriRef.current) {
+            FileSystemLegacy.deleteAsync(prevTempUriRef.current, { idempotent: true }).catch(() => {});
+            prevTempUriRef.current = null;
+          }
+          const cache = FileSystemLegacy.cacheDirectory ?? "";
+          const dest = `${cache}video-import-${Date.now()}.mp4`;
+          await FileSystemLegacy.copyAsync({ from: asset.uri, to: dest });
+          prevTempUriRef.current = dest;
+          resolvedUri = dest;
+        } catch (copyError) {
+          Alert.alert(
+            t("common.error"),
+            copyError instanceof Error ? copyError.message : t("import.failedToPick"),
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
+      setVideoUri(resolvedUri);
       setVideoMetadata({
         width: asset.width ?? 0,
         height: asset.height ?? 0,

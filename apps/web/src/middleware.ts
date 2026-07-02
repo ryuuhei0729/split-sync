@@ -31,7 +31,8 @@ const FFMPEG_ORIGIN = (() => {
 // CSP (Issue #17) — timer は FFmpeg WASM 用に wasm-unsafe-eval / worker-src blob: / R2 を許可
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
+  // blob: は FFmpeg WASM (マルチスレッド版) が core/worker を blob URL のスクリプトとしてロードするため必須
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.supabase.co",
   "media-src 'self' blob:",

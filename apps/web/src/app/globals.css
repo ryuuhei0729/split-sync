@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans), var(--font-noto-sans-jp), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -100,6 +100,21 @@
   html, body {
     height: 100%;
   }
+
+  /* 言語ごとに CJK フォントを切り替える。日本語フォントにはハングルや
+     簡体字固有の字形が無いため、html lang 属性に応じて優先フォントを差し替える。
+     (@theme inline では --font-sans が utility にインライン展開され html へ伝播しないため、
+      html に明示的に font-family を指定して :lang() で上書きする) */
+  html {
+    font-family: var(--font-geist-sans), var(--font-noto-sans-jp), ui-sans-serif, system-ui, sans-serif;
+  }
+  html:lang(ko) {
+    font-family: var(--font-geist-sans), var(--font-noto-sans-kr), ui-sans-serif, system-ui, sans-serif;
+  }
+  html:lang(zh) {
+    font-family: var(--font-geist-sans), var(--font-noto-sans-sc), ui-sans-serif, system-ui, sans-serif;
+  }
+
   body {
     @apply bg-background text-foreground;
   }
