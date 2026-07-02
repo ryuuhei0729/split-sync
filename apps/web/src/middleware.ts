@@ -38,7 +38,8 @@ const CSP = [
   "media-src 'self' blob:",
   "font-src 'self'",
   [
-    "connect-src 'self'",
+    // blob: は FFmpeg WASM ワーカーが core/wasm を blob URL から Fetch でロードするため必須
+    "connect-src 'self' blob:",
     SUPABASE_ORIGIN,
     SUPABASE_WS_ORIGIN,
     "https://*.supabase.co",
