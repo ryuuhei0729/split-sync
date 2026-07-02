@@ -57,7 +57,7 @@ export function SwimHubFamilyFooter() {
     },
     {
       name: t("footer.contact"),
-      href: "https://swim-hub.app/contact",
+      href: "https://swim-hub.app/contact?app=timer",
       icon: Mail,
       external: true,
     },
