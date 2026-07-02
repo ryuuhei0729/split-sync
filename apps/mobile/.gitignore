@@ -33,6 +33,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+# EAS submit 用サービスアカウント鍵 (eas.json が参照。絶対にコミットしない)
+google-service-account-key.json
+
 # typescript
 *.tsbuildinfo
 

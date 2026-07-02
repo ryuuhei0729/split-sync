@@ -2,7 +2,8 @@
  * RevenueCat SDK ラッパー
  * iOS は App Store (appl_ キー)、Android は Google Play (goog_ キー) を使用する。
  * プラットフォームに対応する有効なAPIキーが設定されている場合のみ初期化する。
- * キー未設定（または無効）の場合は全操作を no-op とし、課金UIを無効化する。
+ * キー未設定（または無効）の場合、読み取り系操作は no-op（null 返却）とし、
+ * 購入/復元は RevenueCatNotInitializedError を投げて呼び出し側に通知する。
  */
 import { Platform } from "react-native";
 import Purchases, {
@@ -22,6 +23,17 @@ const isValidApiKey =
   !!API_KEY && !!EXPECTED_PREFIX && API_KEY.startsWith(EXPECTED_PREFIX);
 
 let isInitialized = false;
+
+/**
+ * SDK が未初期化（キー未設定・無効）のまま課金操作が呼ばれたことを示す。
+ * 呼び出し側でユーザーキャンセル（null）と区別し、成功と誤表示しないために使う。
+ */
+export class RevenueCatNotInitializedError extends Error {
+  constructor() {
+    super("RevenueCat is not initialized");
+    this.name = "RevenueCatNotInitializedError";
+  }
+}
 
 /** SDK を初期化する（対応プラットフォームの有効なAPIキーがある場合のみ） */
 export async function initRevenueCat(): Promise<void> {
@@ -75,7 +87,7 @@ export async function getOfferings(): Promise<PurchasesOfferings | null> {
 export async function purchasePackage(
   pkg: PurchasesPackage,
 ): Promise<CustomerInfo | null> {
-  if (!isInitialized) return null;
+  if (!isInitialized) throw new RevenueCatNotInitializedError();
   try {
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     return customerInfo;
@@ -90,7 +102,7 @@ export async function purchasePackage(
 
 /** 購入をリストアする */
 export async function restorePurchases(): Promise<CustomerInfo | null> {
-  if (!isInitialized) return null;
+  if (!isInitialized) throw new RevenueCatNotInitializedError();
   try {
     const customerInfo = await Purchases.restorePurchases();
     return customerInfo;
