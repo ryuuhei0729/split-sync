@@ -11,6 +11,8 @@ const ja = {
     new: "新規",
     close: "閉じる",
     language: "言語",
+    confirm: "確認",
+    processing: "処理中...",
   },
 
   meta: {

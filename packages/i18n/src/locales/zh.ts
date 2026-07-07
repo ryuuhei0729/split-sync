@@ -13,6 +13,8 @@ const zh: TranslationShape = {
     new: "新建",
     close: "关闭",
     language: "语言",
+    confirm: "确认",
+    processing: "处理中...",
   },
 
   meta: {

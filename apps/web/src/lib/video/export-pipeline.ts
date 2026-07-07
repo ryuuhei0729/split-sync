@@ -205,7 +205,7 @@ export async function exportVideoWithStopwatch(
       "-filter_complex",
       `[0:v]${filterChain}[bg];[1:v]scale=${iconSize}:${iconSize},format=rgba,colorchannelmixer=aa=0.30[icon];[bg][icon]overlay=${iconX}:${iconY}[tmp];[2:v]${summaryScale}[sum];[tmp][sum]overlay=0:0:enable='gte(t,${summaryEnableT})'[v]`,
       "-map", "[v]",
-      "-map", "0:a",
+      "-map", "0:a?",
       ...baseArgs,
     ]);
   } else if (hasIcon) {
@@ -222,7 +222,7 @@ export async function exportVideoWithStopwatch(
       "-filter_complex",
       `[0:v]${filterChain}[bg];[1:v]scale=${iconSize}:${iconSize},format=rgba,colorchannelmixer=aa=0.30[icon];[bg][icon]overlay=${iconX}:${iconY}[v]`,
       "-map", "[v]",
-      "-map", "0:a",
+      "-map", "0:a?",
       ...baseArgs,
     ]);
   } else if (hasSummary && finishTime !== null) {
@@ -235,7 +235,7 @@ export async function exportVideoWithStopwatch(
       "-filter_complex",
       `[0:v]${filterChain}[bg];[1:v]${summaryScale}[sum];[bg][sum]overlay=0:0:enable='gte(t,${summaryEnableT})'[v]`,
       "-map", "[v]",
-      "-map", "0:a",
+      "-map", "0:a?",
       ...baseArgs,
     ]);
   } else {

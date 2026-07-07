@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { localizeAuthError } from "../utils/authErrorLocalizer";
+import { getRedirectUri } from "../lib/google-auth";
 
 export function useEmailAuth() {
   const { t } = useTranslation();
@@ -44,6 +45,11 @@ export function useEmailAuth() {
           password,
           options: {
             data: { name },
+            // Open the confirmation link back in the app (swimhubtimer://) so the
+            // root Linking handler can complete the session — otherwise the link
+            // opens the web LP and the sign-up happy path dead-ends. The Supabase
+            // project's Redirect URLs must include this scheme.
+            emailRedirectTo: getRedirectUri(),
           },
         });
         if (authError) {

@@ -2,32 +2,31 @@
 
 import { useCallback } from "react";
 import { useEditorStore } from "@/stores/editor-store";
-import { detectStartSignal } from "@/lib/audio/signal-detector";
+import { detectStartSignalAsync } from "@/lib/audio/signal-detector";
 
 export function useStartSignalDetection() {
-  const { audioBuffer, setDetectedSignalTime, setIsDetecting, isDetecting } = useEditorStore();
+  const setDetectedSignalTime = useEditorStore((s) => s.setDetectedSignalTime);
+  const setIsDetecting = useEditorStore((s) => s.setIsDetecting);
+  const isDetecting = useEditorStore((s) => s.isDetecting);
 
   const detect = useCallback(async () => {
-    if (!audioBuffer) return;
+    // Read the buffer fresh so a detect() triggered right after analyze()
+    // (which just populated the store) doesn't run against a stale null.
+    const audioBuffer = useEditorStore.getState().audioBuffer;
+    if (!audioBuffer) return null;
 
     setIsDetecting(true);
 
     try {
-      // Run detection in a microtask to keep UI responsive
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const result = detectStartSignal(audioBuffer);
-
-      if (result) {
-        setDetectedSignalTime(result.time);
-      } else {
-        setDetectedSignalTime(null);
-      }
-
+      // Chunked detector yields to the event loop between frames so the UI
+      // stays responsive instead of freezing for the whole STFT pass.
+      const result = await detectStartSignalAsync(audioBuffer);
+      setDetectedSignalTime(result ? result.time : null);
       return result;
     } finally {
       setIsDetecting(false);
     }
-  }, [audioBuffer, setDetectedSignalTime, setIsDetecting]);
+  }, [setDetectedSignalTime, setIsDetecting]);
 
   return { detect, isDetecting };
 }

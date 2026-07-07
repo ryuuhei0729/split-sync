@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useEditorStore } from "@/stores/editor-store";
 import { useVideoExport } from "@/hooks/useVideoExport";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,16 @@ export function ExportDialog() {
     outputBlob,
     limitReached,
   } = useVideoExport(showWatermark);
+
+  // Plan-gating guard: exportSettings.resolution can hold a paywalled default (the store
+  // defaults to "1080") that no free/guest user ever actively chose. Normalize it to an
+  // allowed value as soon as the plan is known so the UI never shows a paywalled default as
+  // the selected quality (existing onValueChange validation above still guards manual picks).
+  useEffect(() => {
+    if (!availableResolutions.includes(exportSettings.resolution)) {
+      setExportSettings({ resolution: availableResolutions[availableResolutions.length - 1] });
+    }
+  }, [availableResolutions, exportSettings.resolution, setExportSettings]);
 
   const [exportTriggered, setExportTriggered] = useState(false);
   const remainingExports = useMemo(() => {

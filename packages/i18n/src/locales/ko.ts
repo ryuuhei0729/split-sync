@@ -13,6 +13,8 @@ const ko: TranslationShape = {
     new: "새로 만들기",
     close: "닫기",
     language: "언어",
+    confirm: "확인",
+    processing: "처리 중...",
   },
 
   meta: {

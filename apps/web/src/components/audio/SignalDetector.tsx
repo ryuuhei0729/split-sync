@@ -20,14 +20,17 @@ export function SignalDetector() {
     setStartTime,
   } = useEditorStore();
 
-  const { analyze, isAnalyzing, error: analysisError } = useAudioAnalysis();
+  const { analyze, isAnalyzing, error: analysisError, attempted } = useAudioAnalysis();
   const { detect, isDetecting } = useStartSignalDetection();
 
   useEffect(() => {
-    if (!audioBuffer && !isAnalyzing) {
+    // Auto-analyze once per video. Gate on `attempted`/`analysisError` too so a
+    // decode failure (e.g. a silent/unsupported track) does not re-fire the
+    // effect forever, re-reading the whole video file each time.
+    if (!audioBuffer && !isAnalyzing && !attempted && !analysisError) {
       analyze();
     }
-  }, [audioBuffer, isAnalyzing, analyze]);
+  }, [audioBuffer, isAnalyzing, attempted, analysisError, analyze]);
 
   const handleAutoDetect = async () => {
     if (!audioBuffer) {

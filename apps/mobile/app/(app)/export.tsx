@@ -118,8 +118,12 @@ export default function ExportScreen() {
   const availableResolutions = getAvailableResolutions(effectivePlan);
   const showWatermark = shouldShowWatermark(effectivePlan);
 
-  const videoWidth = videoMetadata?.width ?? 1920;
-  const videoHeight = videoMetadata?.height ?? 1080;
+  // `|| ` (not `??`): some Android pickers report width/height as 0 rather than
+  // null. A 0 would flow into Skia.Surface.MakeOffscreen(0, 0) → null → every
+  // overlay render throws and the timer/summary/watermark silently vanish.
+  // Treat 0 as "unknown" and fall back to a sane default resolution.
+  const videoWidth = videoMetadata?.width || 1920;
+  const videoHeight = videoMetadata?.height || 1080;
 
   const remainingExports = useMemo(() => {
     if (effectivePlan === "premium" || effectivePlan === "free") return null;
@@ -179,13 +183,24 @@ export default function ExportScreen() {
     }
   }, [adState, adRewardEarned, adUnavailable]);
 
-  // Fallback: if ad fails to load, allow export without ad after delay
+  // Fallback: if the ad genuinely fails to LOAD/SHOW, allow export without ad
+  // after a short delay. Note: a user who *dismisses* the ad reports "dismissed"
+  // (not "error"), so early-closing no longer grants free access.
   useEffect(() => {
     if (adState === "error" && !adUnavailable) {
       const timer = setTimeout(() => setAdUnavailable(true), 2000);
       return () => clearTimeout(timer);
     }
   }, [adState, adUnavailable]);
+
+  // If the user dismissed the ad without earning the reward, reload it so the
+  // auto-show effect re-presents it — the export stays gated until they watch
+  // one through (or one genuinely can't be loaded → the fallback above).
+  useEffect(() => {
+    if (adState === "dismissed" && !adRewardEarned && !adUnavailable) {
+      adControllerRef.current?.load();
+    }
+  }, [adState, adRewardEarned, adUnavailable]);
 
   // Set limitReached based on remaining exports (guest only; free/premium unlimited)
   useEffect(() => {
@@ -344,10 +359,16 @@ export default function ExportScreen() {
             ? computeSummaryStartT(startTime, finishTime, duration)
             : null;
         const endAbs = summaryStartAbs ?? duration;
-        // Render over VIDEO time [0, endAbs] so the timer shows 0:00 from the
-        // very start of the clip (matching the preview), freezes at finishTime,
-        // and hides when the summary appears. elapsed = max(0, t - startTime).
-        if (endAbs > 0) {
+        // Render the timer sequence over [seqStart, endAbs): a short 0:00
+        // pre-roll before the start signal (to match the preview) plus the race
+        // itself — freezing at finishTime and hiding when the summary appears.
+        // Rendering from video-time 0 (as before) emitted thousands of
+        // byte-identical "0:00" frames when the race started late in a long
+        // clip, freezing the JS thread and filling the disk (the export then
+        // hung at 0%). elapsedFor still maps each frame's video time correctly.
+        const PRE_ROLL_SECONDS = 3;
+        const seqStart = Math.max(0, startTime - PRE_ROLL_SECONDS);
+        if (endAbs > seqStart) {
           const sortedSplits = [...splitTimes].sort((a, b) => a.time - b.time);
           const elapsedFor = (videoSec: number) => {
             const e = Math.max(0, videoSec - startTime);
@@ -369,7 +390,7 @@ export default function ExportScreen() {
             require("../../lib/overlay/render-offscreen") as typeof import("../../lib/overlay/render-offscreen");
           const seq = await renderTimerSequence({
             config: stopwatchConfig,
-            startSec: 0,
+            startSec: seqStart,
             endSec: endAbs,
             fps: SKIA_TIMER_SEQUENCE_FPS,
             width: videoWidth,
@@ -377,12 +398,17 @@ export default function ExportScreen() {
             elapsedFor,
             activeSplitAt,
             watermarkIcon: null, // watermark stays a separate FFmpeg overlay
+            // Surface render progress so the UI isn't frozen at 0% during the
+            // (potentially long) headless PNG-sequence render.
+            onProgress: (done, total) => {
+              if (total > 0) setProgress(done / total);
+            },
           });
           timerSequenceDir = seq.dir;
           timerSequence = {
             pattern: seq.pattern,
             fps: seq.fps,
-            startT: 0, // frame 0 = video time 0
+            startT: seqStart, // frame 0 = video time seqStart
             endT: endAbs,
             region: seq.region,
           };
@@ -417,7 +443,7 @@ export default function ExportScreen() {
         stopwatchConfig,
         isFinished,
         finishTime,
-        videoMetadata?.height ?? 1080,
+        videoHeight,
         resolvedSettings,
         (timeMs) => {
           if (durationMs > 0) {
@@ -462,7 +488,6 @@ export default function ExportScreen() {
     availableResolutions,
     setExportSettings,
     duration,
-    videoMetadata?.height,
     showWatermark,
     effectivePlan,
     isPremium,

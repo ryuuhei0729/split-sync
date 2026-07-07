@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { View, Text, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, Linking } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  StyleSheet,
+  Linking,
+  Platform,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
@@ -280,7 +289,15 @@ export default function AccountScreen() {
         {/* サブスクリプション管理 */}
         <TouchableOpacity
           style={styles.manageSubButton}
-          onPress={() => Linking.openURL("https://apps.apple.com/account/subscriptions")}
+          onPress={() =>
+            Linking.openURL(
+              Platform.select({
+                ios: "https://apps.apple.com/account/subscriptions",
+                android: "https://play.google.com/store/account/subscriptions",
+                default: "https://apps.apple.com/account/subscriptions",
+              }),
+            )
+          }
         >
           <Text style={styles.manageSubText}>{t("account.manageSubscription")}</Text>
         </TouchableOpacity>

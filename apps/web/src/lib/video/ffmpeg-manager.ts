@@ -71,7 +71,13 @@ class FFmpegManager {
 
   async exec(args: string[]): Promise<void> {
     const ffmpeg = await this.load();
-    await ffmpeg.exec(args);
+    // ffmpeg.exec() resolves with the process's exit code rather than rejecting on failure;
+    // ignoring it here previously let a failed encode surface later as a cryptic
+    // `readFile("output.mp4")` "file not found" error instead of the real cause.
+    const exitCode = await ffmpeg.exec(args);
+    if (exitCode !== 0) {
+      throw new Error(`FFmpeg exec failed with exit code ${exitCode} for args: ${args.join(" ")}`);
+    }
   }
 
   isLoaded(): boolean {

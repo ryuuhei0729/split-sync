@@ -46,6 +46,7 @@ module.exports = () => {
     plugins: [
       "expo-router",
       "expo-video",
+      "expo-secure-store",
       [
         "expo-image-picker",
         {

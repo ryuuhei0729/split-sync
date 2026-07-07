@@ -85,7 +85,7 @@ export function SwimHubFamilyFooter() {
                   className="w-full h-full object-contain"
                 />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">SwimHub Timer</h3>
+              <h3 className="text-lg font-semibold text-gray-900 font-(family-name:--font-chakra-petch)">SwimHub Timer</h3>
             </div>
             <p className="text-sm text-gray-600 leading-relaxed">
               {t("footer.appDescription")}
@@ -150,7 +150,7 @@ export function SwimHubFamilyFooter() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-blue-700">{service.name}</span>
+                      <span className="text-sm font-semibold text-blue-700 font-(family-name:--font-chakra-petch)">{service.name}</span>
                       <span className="text-[10px] font-medium text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">
                         {t("footer.currentlyUsing")}
                       </span>
@@ -175,7 +175,7 @@ export function SwimHubFamilyFooter() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                      <span className="text-sm font-semibold text-gray-700 group-hover:text-gray-900 font-(family-name:--font-chakra-petch)">
                         {service.name}
                       </span>
                       <ExternalLink className="w-3 h-3 text-gray-400 group-hover:text-gray-500" />

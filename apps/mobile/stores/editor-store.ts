@@ -66,6 +66,10 @@ interface EditorState {
   isFinished: boolean;
   finishTime: number | null;
   finishMemo: string;
+  // The split (if any) at raceDistance that finishRecording replaced with the
+  // auto finish split — stashed so revertFinish can restore the user's original
+  // split (its time/memo) instead of silently discarding it.
+  replacedFinishSplit: SplitTime | null;
   designConfirmed: boolean;
 
   // Which overlay element is currently being edited in the preview. Shared so
@@ -134,6 +138,7 @@ const initialState = {
   isFinished: false,
   finishTime: null as number | null,
   finishMemo: "",
+  replacedFinishSplit: null as SplitTime | null,
   designConfirmed: false,
   timerEditing: false,
   summaryEditing: false,
@@ -224,7 +229,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Auto-record a split at raceDistance so the FinishSummaryTable can compute
     // the final lap times consistently with the rest of the rows.
     let updatedSplits = splitTimes;
+    // Stash any split the user already recorded at raceDistance so revertFinish
+    // can put it back — otherwise finishing then editing silently loses it.
+    let replacedFinishSplit: SplitTime | null = null;
     if (raceDistance !== null && raceDistance > 0) {
+      replacedFinishSplit = splitTimes.find((s) => s.distance === raceDistance) ?? null;
       const filtered = splitTimes.filter((s) => s.distance !== raceDistance);
       updatedSplits = [
         ...filtered,
@@ -238,6 +247,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
     set({
       splitTimes: updatedSplits,
+      replacedFinishSplit,
       isFinished: true,
       finishTime: elapsedSeconds,
       finishMemo: (memo ?? "").trim(),
@@ -245,7 +255,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   revertFinish: () => {
-    const { splitTimes, finishTime, raceDistance } = get();
+    const { splitTimes, finishTime, raceDistance, replacedFinishSplit } = get();
     // Drop the auto-added finish split (only if it still matches finishTime —
     // that disambiguates from a split the user manually placed at raceDistance).
     let restored = splitTimes;
@@ -253,9 +263,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       restored = splitTimes.filter(
         (s) => !(s.distance === raceDistance && s.time === finishTime),
       );
+      // Restore the user's original split at raceDistance that finishRecording
+      // replaced (with its original time/memo), keeping the list distance-sorted.
+      if (replacedFinishSplit) {
+        restored = [...restored, replacedFinishSplit].sort((a, b) => a.distance - b.distance);
+      }
     }
     set({
       splitTimes: restored,
+      replacedFinishSplit: null,
       isFinished: false,
       finishTime: null,
       finishMemo: "",
@@ -271,6 +287,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       isFinished: false,
       finishTime: null,
       finishMemo: "",
+      replacedFinishSplit: null,
     });
   },
 

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono, Noto_Sans_JP, Noto_Sans_KR, Noto_Sans_SC } from "next/font/google";
+import { Inter, JetBrains_Mono, Noto_Sans_JP, Noto_Sans_KR, Noto_Sans_SC, Chakra_Petch } from "next/font/google";
 import { notFound } from "next/navigation";
 import { I18nProvider } from "@/components/I18nProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
@@ -38,6 +38,12 @@ const notoSansSC = Noto_Sans_SC({
   variable: "--font-noto-sans-sc",
   weight: ["400", "500", "700"],
   preload: false,
+});
+
+const chakraPetch = Chakra_Petch({
+  subsets: ["latin"],
+  variable: "--font-chakra-petch",
+  weight: ["600", "700"],
 });
 
 const siteUrl = "https://timer.swim-hub.app";
@@ -139,7 +145,7 @@ export default async function LocaleLayout({
   return (
     <html
       lang={locale}
-      className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansJP.variable} ${notoSansKR.variable} ${notoSansSC.variable} h-full`}
+      className={`${inter.variable} ${jetbrainsMono.variable} ${notoSansJP.variable} ${notoSansKR.variable} ${notoSansSC.variable} ${chakraPetch.variable} h-full`}
     >
       <body className="h-full antialiased">
         <I18nProvider locale={locale}>

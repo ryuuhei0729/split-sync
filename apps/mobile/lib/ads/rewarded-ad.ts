@@ -24,7 +24,16 @@ function getRewardedAdUnitId(): string {
   }) as string;
 }
 
-export type AdState = "idle" | "loading" | "loaded" | "showing" | "rewarded" | "error";
+export type AdState =
+  | "idle"
+  | "loading"
+  | "loaded"
+  | "showing"
+  | "rewarded"
+  // User closed the ad before earning the reward (distinct from a load/show
+  // failure). Must NOT grant free access — the caller re-presents the ad.
+  | "dismissed"
+  | "error";
 
 export interface RewardedAdController {
   load: () => void;
@@ -81,7 +90,10 @@ export function createRewardedAdController(): RewardedAdController | null {
     unsubscribers.push(
       ad.addAdEventListener(AdEventType.CLOSED, () => {
         if (!adRewardEarned) {
-          setState("error");
+          // Closed without earning the reward — the user dismissed it. Report
+          // "dismissed" (not "error") so the export gate stays closed and the
+          // caller can re-present the ad instead of granting free access.
+          setState("dismissed");
         }
       }),
     );

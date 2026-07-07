@@ -365,9 +365,12 @@ function appendOffset(yExpr: string, addPx: number): string {
  * Strips characters that have unpredictable meaning in FFmpeg expressions to
  * avoid silent corruption of the filter graph.
  */
-function escapeDrawtextText(s: string): string {
+export function escapeDrawtextText(s: string): string {
   return s
     .replace(/\\/g, "")
+    // The whole filtergraph is passed to ffmpeg-kit wrapped in double quotes, so
+    // a `"` in user text closes the argument early and breaks the graph. Strip it.
+    .replace(/"/g, "")
     .replace(/'/g, "’")
     .replace(/:/g, "\\:")
     .replace(/%/g, "\\%");

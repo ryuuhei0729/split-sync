@@ -13,6 +13,8 @@ const en: TranslationShape = {
     new: "New",
     close: "Close",
     language: "Language",
+    confirm: "Confirm",
+    processing: "Processing...",
   },
 
   meta: {

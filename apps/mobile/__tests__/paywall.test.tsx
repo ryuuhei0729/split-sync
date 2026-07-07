@@ -40,47 +40,26 @@ import React from "react";
 
 describe("PaywallScreen (timer) - ゲストガード", () => {
   describe("ゲスト状態", () => {
-    it("should NOT render purchase button when guestMode is true", () => {
-      // [V-01] ゲスト時に購入ボタンが表示されないこと
-      // render(<PaywallScreen />) with guestAuthContext
-      // expect(screen.queryByText(/startTrial|subscribe/)).toBeNull();
-    });
+    it.todo("should NOT render purchase button when guestMode is true");
 
-    it("should render login CTA when guestMode is true", () => {
-      // [V-02] ゲスト時にログイン CTA が表示されること
-      // expect(screen.getByRole("button", { name: /ログイン|アカウント登録/ })).toBeTruthy();
-    });
+    it.todo("should render login CTA when guestMode is true");
 
-    it("should navigate to /(auth)/get-started when login CTA is pressed", () => {
-      // [V-03] ログイン CTA タップで /(auth)/get-started に遷移すること
-      // fireEvent.press(loginCTA);
-      // expect(mockRouterPush).toHaveBeenCalledWith("/(auth)/get-started");
-    });
+    it.todo("should navigate to /(auth)/get-started when login CTA is pressed");
 
-    it("should NOT call purchasePackage even if handlePurchase is triggered directly", () => {
-      // [V-04] handlePurchase の防御ガードが機能すること (ゲスト時に購入 API が呼ばれない)
-    });
+    it.todo("should NOT call purchasePackage even if handlePurchase is triggered directly");
   });
 
   describe("Free ユーザー状態", () => {
-    it("should render purchase button for free user", () => {
-      // [V-05] Free ユーザーには購入ボタンが表示されること (既存動作の回帰確認)
-    });
+    it.todo("should render purchase button for free user");
 
-    it("should NOT render login CTA for free user", () => {
-      // [V-06] Free ユーザーにはログイン CTA が表示されないこと
-    });
+    it.todo("should NOT render login CTA for free user");
   });
 
   describe("Premium ユーザー状態", () => {
-    it("should render already-premium message and NOT render purchase button", () => {
-      // [V-07] Premium ユーザーには「すでに Premium」メッセージが表示されること
-    });
+    it.todo("should render already-premium message and NOT render purchase button");
   });
 
   describe("境界ケース", () => {
-    it("should render login CTA when guestMode transitions from false to true", () => {
-      // [V-08] guestMode が true → false に変わった瞬間、ログイン CTA が消えること
-    });
+    it.todo("should render login CTA when guestMode transitions from false to true");
   });
 });

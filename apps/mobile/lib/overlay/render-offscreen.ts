@@ -47,6 +47,9 @@ export async function renderOverlayPngBytes(
     surface.flush();
     const image = surface.makeImageSnapshot();
     const bytes = image.encodeToBytes(); // PNG, lossless
+    // Dispose the SkImage immediately — it holds native/GPU-backed memory the
+    // JS GC can't see, so leaving it to GC accumulates until the OS kills us.
+    image.dispose?.();
     return bytes;
   } finally {
     surface.dispose?.();
@@ -228,8 +231,22 @@ export async function renderTimerSequence(opts: {
   dir.create();
 
   const total = Math.max(0, Math.ceil((endSec - startSec) * fps));
+  // Catastrophe backstop: without this a mis-computed range (e.g. startSec 0 on
+  // a 10-min clip) would try to render tens of thousands of PNGs, freezing the
+  // JS thread and filling the disk. The caller narrows [startSec,endSec) to the
+  // race window; this only fires on a genuinely out-of-range request.
+  const MAX_SEQUENCE_FRAMES = 30 * 60 * 12; // ~12 min at 30fps
+  if (total > MAX_SEQUENCE_FRAMES) {
+    throw new Error(
+      `Timer sequence too long: ${total} frames (max ${MAX_SEQUENCE_FRAMES}). Trim the clip.`,
+    );
+  }
   const surface = Skia.Surface.MakeOffscreen(region.width, region.height);
   if (!surface) throw new Error("Skia.Surface.MakeOffscreen returned null");
+
+  // Yield to the event loop every few frames so the JS thread isn't frozen for
+  // the entire sequence (each frame does a synchronous PNG encode + file write).
+  const YIELD_EVERY = 4;
 
   try {
     const canvas = surface.getCanvas();
@@ -253,13 +270,28 @@ export async function renderTimerSequence(opts: {
       }
       canvas.restore();
       surface.flush();
-      const bytes = surface.makeImageSnapshot().encodeToBytes();
+      const image = surface.makeImageSnapshot();
+      const bytes = image.encodeToBytes();
+      image.dispose?.(); // release native/GPU memory each frame (see above)
       const name = `ol_${String(i + 1).padStart(5, "0")}.png`;
       const file = new File(dir, name);
       file.create();
       file.write(bytes);
       onProgress?.(i + 1, total);
+      if (i % YIELD_EVERY === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
+  } catch (e) {
+    // A mid-render failure (disk full, Skia error) would otherwise orphan the
+    // frames already written to `dir`; delete the partial directory first so
+    // the deterministic dir name doesn't leave GBs behind until the next run.
+    try {
+      if (dir.exists) dir.delete();
+    } catch {
+      // ignore cleanup errors
+    }
+    throw e;
   } finally {
     surface.dispose?.();
   }

@@ -1,64 +1,7 @@
-import "server-only";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { UserPlan } from "@swimhub-timer/shared";
-
-const APP = "swimhub_timer" as const;
-
-function getTodayJST(): string {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" }))
-    .toISOString()
-    .split("T")[0];
-}
-
-export async function getTodayExportCount(supabase: SupabaseClient, uid: string): Promise<number> {
-  const today = getTodayJST();
-  const { data } = await supabase
-    .from("app_daily_usage")
-    .select("usage_count")
-    .eq("user_id", uid)
-    .eq("app", APP)
-    .eq("usage_date", today)
-    .single();
-  return data?.usage_count ?? 0;
-}
-
-export async function canUserExport(
-  supabase: SupabaseClient,
-  uid: string,
-  plan: UserPlan,
-): Promise<boolean> {
-  if (plan === "premium") return true;
-  if (plan === "free") return true;
-  if (plan === "guest") return true;
-  const count = await getTodayExportCount(supabase, uid);
-  return count < 1;
-}
-
-export async function incrementExportCount(supabase: SupabaseClient, uid: string): Promise<void> {
-  const today = getTodayJST();
-  const { data: existing } = await supabase
-    .from("app_daily_usage")
-    .select("id, usage_count")
-    .eq("user_id", uid)
-    .eq("app", APP)
-    .eq("usage_date", today)
-    .single();
-
-  if (existing) {
-    await supabase
-      .from("app_daily_usage")
-      .update({
-        usage_count: existing.usage_count + 1,
-        last_used_at: new Date().toISOString(),
-      })
-      .eq("id", existing.id);
-  } else {
-    await supabase.from("app_daily_usage").insert({
-      user_id: uid,
-      app: APP,
-      usage_date: today,
-      usage_count: 1,
-      last_used_at: new Date().toISOString(),
-    });
-  }
-}
+// このファイルはかつてサーバー側の書き出し(エクスポート)回数制限を実装していたが、
+// 唯一の呼び出し元だった /api/export/check, /api/export/record が実際にはどこからも
+// 呼ばれていないデッドコードだったため、これらのルートと合わせて削除した。
+//
+// 現状、ゲストの書き出し回数制限は guest-daily-limit.ts の localStorage による
+// クライアント側チェックのみで行われている。サーバー側で強制するには端末/IP等の
+// ゲスト識別手段が必要であり、対応するかどうかは未確定のプロダクト判断事項である。
