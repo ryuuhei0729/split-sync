@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
@@ -98,7 +98,7 @@ function formatAuthError(err: unknown, action: "signin" | "signup", t: TFunction
   return t("auth.errors.generic");
 }
 
-export default function LoginPage() {
+function LoginPageContent() {
   const { t } = useTranslation();
   const { user, loading, signInWithGoogle, signInWithApple, signInWithEmail, signUpWithEmail } = useAuth();
   const router = useRouter();
@@ -431,6 +431,22 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// useSearchParams はプリレンダー時に Suspense 境界が必須
+// (I18nProvider が SSR でも children を描画するようになり顕在化)
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <LoadingSpinner size="lg" />
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }
 
