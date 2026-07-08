@@ -51,16 +51,6 @@ export async function dispatchVideoExport(options: ExportVideoOptions): Promise<
     }
   }
 
-  const blob = await exportVideoWithStopwatch(
-    options.videoFile,
-    options.startSignalTime,
-    options.stopwatchConfig,
-    options.originalVideoHeight,
-    options.exportSettings,
-    options.onProgress,
-    options.showWatermark,
-    options.summaryImageData,
-    options.finishTime,
-  );
+  const blob = await exportVideoWithStopwatch(options);
   return { blob, engine: "ffmpeg" };
 }

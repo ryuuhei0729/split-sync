@@ -45,8 +45,13 @@ import { WebCodecsUnsupportedError } from "./webcodecs-types";
  * Tries to load the "SwimHub Timer" watermark icon as an `ImageBitmap`. Mirrors the
  * ffmpeg engine's icon fetch: on any failure, fall back to a text-only watermark
  * (`drawWatermark` already handles `icon: null` gracefully) rather than failing the export.
+ *
+ * Exported (not WebCodecs-specific — plain `fetch` + `createImageBitmap`) so the ffmpeg
+ * fallback engine (`export-pipeline.ts`) reuses this exact fetch-with-fallback behavior
+ * instead of re-implementing it, keeping the "icon fetch failure -> text-only watermark"
+ * behavior single-sourced across both engines.
  */
-async function loadWatermarkIcon(): Promise<OverlayImage | null> {
+export async function loadWatermarkIcon(): Promise<OverlayImage | null> {
   try {
     const resp = await fetch("/apple-touch-icon.png");
     if (!resp.ok) return null;

@@ -91,25 +91,40 @@ describe("dispatchVideoExport — 実行時フォールバック (最重要: PM�
     expect(exportVideoWithStopwatch).toHaveBeenCalledTimes(1);
   });
 
-  it("[V-18] フォールバック時、ffmpeg 版に渡される引数は dispatchVideoExport が受け取った元の引数と完全に一致する", async () => {
+  it("[V-18] フォールバック時、ffmpeg 版は dispatchVideoExport が受け取った単一 ExportVideoOptions オブジェクトをそのまま (改変せず) 1個の引数で受け取る", async () => {
+    // 案A でシグネチャが「9引数の分解」から「単一 options オブジェクト」に変わったため、
+    // 単なる旧シグネチャのハードコード更新ではなく、以下2点を独立に検証する:
+    //   1. 呼び出し引数の個数が1個であること (分解引数への先祖返りをしていないか)
+    //   2. options に含まれる、この分岐で特に重要な値 (splitTimes/isFinished/summaryImageData/
+    //      finishTime) が「WebCodecs 専用引数 (raceDistance 等) も含めて」欠落・改変なく
+    //      渡っていること — フォールバック時に「WebCodecs 用に一部整形された引数」が
+    //      間違って ffmpeg 版に渡ってしまう回帰を検出する
     vi.mocked(checkWebCodecsSupport).mockResolvedValue(true);
     vi.mocked(exportVideoWithStopwatchWebCodecs).mockRejectedValue(new Error("boom"));
     vi.mocked(exportVideoWithStopwatch).mockResolvedValue(new Blob(["ff"], { type: "video/mp4" }));
 
-    const options = makeOptions({ finishTime: 45, isFinished: true, summaryImageData: new Blob(["png"]) });
+    const splitTimes = [{ distance: 50, time: 25, lapTime: 25, memo: "test" }];
+    const summaryImageData = new Blob(["png"]);
+    const options = makeOptions({
+      finishTime: 45,
+      isFinished: true,
+      summaryImageData,
+      splitTimes,
+      raceDistance: 100,
+    });
     await dispatchVideoExport(options);
 
-    expect(exportVideoWithStopwatch).toHaveBeenCalledWith(
-      options.videoFile,
-      options.startSignalTime,
-      options.stopwatchConfig,
-      options.originalVideoHeight,
-      options.exportSettings,
-      options.onProgress,
-      options.showWatermark,
-      options.summaryImageData,
-      options.finishTime,
-    );
+    expect(exportVideoWithStopwatch).toHaveBeenCalledTimes(1);
+    const callArgs = vi.mocked(exportVideoWithStopwatch).mock.calls[0];
+    expect(callArgs).toHaveLength(1);
+
+    const passedOptions = callArgs[0];
+    expect(passedOptions).toBe(options); // 参照同一 (再構築・部分コピーされていない)
+    expect(passedOptions.splitTimes).toBe(splitTimes);
+    expect(passedOptions.isFinished).toBe(true);
+    expect(passedOptions.finishTime).toBe(45);
+    expect(passedOptions.summaryImageData).toBe(summaryImageData);
+    expect(passedOptions.raceDistance).toBe(100);
   });
 
   it("[V-20] フォールバック発生時、ffmpeg 版を呼ぶ前に onProgress(0) でリセットする", async () => {
