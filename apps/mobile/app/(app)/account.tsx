@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Linking,
   Platform,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
@@ -133,7 +134,7 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <View style={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {/* User info */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("auth.accountInfo")}</Text>
@@ -325,7 +326,7 @@ export default function AccountScreen() {
             {t("common.appName")} v{appVersion}
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -335,8 +336,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  content: {
+    // flexGrow (not flex) so the footer's marginTop:"auto" still bottom-pins
+    // on tall screens while short screens can scroll
+    flexGrow: 1,
     padding: spacing.lg,
   },
   section: {

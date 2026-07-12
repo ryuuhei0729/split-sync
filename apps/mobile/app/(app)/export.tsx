@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, Dimensions, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, Dimensions, Platform, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import type * as SharingType from "expo-sharing";
 import { useTranslation } from "react-i18next";
@@ -603,6 +603,11 @@ export default function ExportScreen() {
         </View>
       )}
 
+      {/* Scrollable settings — keeps the export button reachable on short
+          screens / large font scales. The capture view above stays outside
+          so its (0,0) view-shot anchoring is unaffected. */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+
       {/* Summary */}
       <View style={styles.summaryCard}>
         <Text style={styles.summaryTitle}>{t("exportScreen.settings")}</Text>
@@ -720,6 +725,7 @@ export default function ExportScreen() {
           )}
         </View>
       )}
+      </ScrollView>
     </View>
   );
 }
@@ -728,6 +734,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: spacing.lg,
     gap: spacing.xl,
   },
