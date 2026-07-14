@@ -33,9 +33,9 @@ import {
   getStopwatchBounds,
   getFinishSummaryBounds,
   SPLIT_DISPLAY_DURATION_SECONDS,
-  SUMMARY_DELAY_SECONDS,
 } from "@swimhub-timer/shared";
 import type { SplitTime, Rect } from "@swimhub-timer/shared";
+import { computeSummaryStartT } from "../../lib/video/export-pipeline";
 import {
   loadOverlayTypefaces,
   MOBILE_WATERMARK_OPTIONS,
@@ -63,6 +63,7 @@ export function StopwatchSkiaOverlay({ videoWidth, videoHeight }: Props) {
   const isFinished = useEditorStore((s) => s.isFinished);
   const finishTime = useEditorStore((s) => s.finishTime);
   const raceDistance = useEditorStore((s) => s.raceDistance);
+  const videoDuration = useEditorStore((s) => s.videoMetadata?.duration ?? 0);
   // Skia owns the geometry: it draws the visuals AND publishes the on-screen
   // bounds so the RN gesture layer can glue its hit areas + selection frame to
   // the exact same box (single source of truth = shared calculatePosition).
@@ -124,14 +125,23 @@ export function StopwatchSkiaOverlay({ videoWidth, videoHeight }: Props) {
     return null;
   }, [splitTimes, elapsed, isFinished, finishTime, raceDistance, startTime]);
 
-  // The timer freezes at finishTime (elapsed is capped above); the summary only
-  // appears SUMMARY_DELAY_SECONDS later, so the frozen finish time is visible
-  // for that gap — matching the export (computeSummaryStartT).
+  // The timer freezes at finishTime (elapsed is capped above); the summary
+  // appears at computeSummaryStartT — the SAME clamped absolute time the export
+  // uses. Previously the preview used the unclamped `finishTime +
+  // SUMMARY_DELAY_SECONDS`, which the clip could end before reaching, so a
+  // finish near the clip end showed a summary in the export that the preview
+  // never displayed. Sharing computeSummaryStartT also hides the timer at the
+  // same instant the export's timer-sequence overlay ends (endT = this value).
+  const summaryStartAbs = useMemo(
+    () => (startTime !== null ? computeSummaryStartT(startTime, finishTime, videoDuration) : null),
+    [startTime, finishTime, videoDuration],
+  );
   const showSummary =
     isFinished &&
     finishTime !== null &&
     startTime !== null &&
-    currentVideoTime - startTime >= finishTime + SUMMARY_DELAY_SECONDS;
+    summaryStartAbs !== null &&
+    currentVideoTime >= summaryStartAbs;
 
   // Draw the picture AND capture the native-resolution bounds of the timer /
   // summary in the same pass (both need the Skia measuring context).

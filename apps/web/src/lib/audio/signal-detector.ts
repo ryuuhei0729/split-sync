@@ -28,53 +28,144 @@ export function detectStartSignal(audioBuffer: AudioBuffer): DetectedSignal | nu
   const beepLowBin = Math.floor(BEEP_FREQUENCY_RANGE.low / binResolution);
   const beepHighBin = Math.ceil(BEEP_FREQUENCY_RANGE.high / binResolution);
 
-  // --- Step 1: Compute per-frame tonality and dominant frequency ---
-  const frameTonality: number[] = [];
-  const frameDominantFreq: number[] = [];
-  const frameEnergy: number[] = [];
+  const frameTonality: number[] = new Array(numWindows);
+  const frameDominantFreq: number[] = new Array(numWindows);
+  const frameEnergy: number[] = new Array(numWindows);
+
+  // Reuse a single window buffer across frames (avoids one Float32Array
+  // allocation per STFT frame — thousands on a multi-minute clip).
+  const windowData = new Float32Array(windowSize);
 
   for (let i = 0; i < numWindows; i++) {
-    const offset = i * hopSize;
-    const windowData = new Float32Array(windowSize);
-    windowData.set(channelData.subarray(offset, offset + windowSize));
-
-    applyHannWindow(windowData);
-    const spectrum = computeMagnitudeSpectrum(windowData);
-
-    // Find peak bin and total energy in beep band
-    let peakBin = beepLowBin;
-    let peakMag = 0;
-    let totalEnergy = 0;
-
-    for (let bin = beepLowBin; bin <= beepHighBin && bin < spectrum.length; bin++) {
-      const mag = spectrum[bin];
-      totalEnergy += mag;
-      if (mag > peakMag) {
-        peakMag = mag;
-        peakBin = bin;
-      }
-    }
-
-    // Tonality: energy within ±3 bins of peak / total energy in band
-    // Pure tone → most energy near peak → high tonality
-    const peakRadius = 3;
-    let peakRegionEnergy = 0;
-    for (
-      let bin = Math.max(beepLowBin, peakBin - peakRadius);
-      bin <= Math.min(beepHighBin, peakBin + peakRadius) && bin < spectrum.length;
-      bin++
-    ) {
-      peakRegionEnergy += spectrum[bin];
-    }
-
-    const tonality = totalEnergy > 0 ? peakRegionEnergy / totalEnergy : 0;
-    const dominantFreq = peakBin * binResolution;
-
-    frameTonality.push(tonality);
-    frameDominantFreq.push(dominantFreq);
-    frameEnergy.push(totalEnergy);
+    const feature = computeFrameFeature(
+      channelData,
+      i * hopSize,
+      windowData,
+      windowSize,
+      beepLowBin,
+      beepHighBin,
+      binResolution,
+    );
+    frameTonality[i] = feature.tonality;
+    frameDominantFreq[i] = feature.dominantFreq;
+    frameEnergy[i] = feature.totalEnergy;
   }
 
+  return selectBestRun(frameTonality, frameDominantFreq, frameEnergy, numWindows, sampleRate, hopSize);
+}
+
+/**
+ * Chunked, non-blocking variant of {@link detectStartSignal}.
+ *
+ * The per-frame STFT loop is the expensive part (thousands of FFTs on a
+ * multi-minute clip). Running it in one synchronous call freezes the main
+ * thread for seconds. This version yields to the event loop periodically so
+ * the UI stays responsive during detection, and reuses the window buffer.
+ * The detection result is identical to the synchronous version.
+ */
+export async function detectStartSignalAsync(
+  audioBuffer: AudioBuffer,
+  onProgress?: (fraction: number) => void,
+): Promise<DetectedSignal | null> {
+  const sampleRate = audioBuffer.sampleRate;
+  const channelData = audioBuffer.getChannelData(0);
+  const windowSize = FFT_WINDOW_SIZE;
+  const hopSize = FFT_HOP_SIZE;
+  const numWindows = Math.floor((channelData.length - windowSize) / hopSize);
+
+  if (numWindows < 2) return null;
+
+  const binResolution = sampleRate / windowSize;
+  const beepLowBin = Math.floor(BEEP_FREQUENCY_RANGE.low / binResolution);
+  const beepHighBin = Math.ceil(BEEP_FREQUENCY_RANGE.high / binResolution);
+
+  const frameTonality: number[] = new Array(numWindows);
+  const frameDominantFreq: number[] = new Array(numWindows);
+  const frameEnergy: number[] = new Array(numWindows);
+
+  const windowData = new Float32Array(windowSize);
+  const YIELD_EVERY = 256; // frames between event-loop yields
+
+  for (let i = 0; i < numWindows; i++) {
+    const feature = computeFrameFeature(
+      channelData,
+      i * hopSize,
+      windowData,
+      windowSize,
+      beepLowBin,
+      beepHighBin,
+      binResolution,
+    );
+    frameTonality[i] = feature.tonality;
+    frameDominantFreq[i] = feature.dominantFreq;
+    frameEnergy[i] = feature.totalEnergy;
+
+    if (i % YIELD_EVERY === 0) {
+      onProgress?.(i / numWindows);
+      // Real macrotask yield so pending input/paint can run between chunks.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  return selectBestRun(frameTonality, frameDominantFreq, frameEnergy, numWindows, sampleRate, hopSize);
+}
+
+/** Compute tonality / dominant frequency / band energy for one STFT frame. */
+function computeFrameFeature(
+  channelData: Float32Array,
+  offset: number,
+  windowData: Float32Array,
+  windowSize: number,
+  beepLowBin: number,
+  beepHighBin: number,
+  binResolution: number,
+): { tonality: number; dominantFreq: number; totalEnergy: number } {
+  windowData.set(channelData.subarray(offset, offset + windowSize));
+
+  applyHannWindow(windowData);
+  const spectrum = computeMagnitudeSpectrum(windowData);
+
+  // Find peak bin and total energy in beep band
+  let peakBin = beepLowBin;
+  let peakMag = 0;
+  let totalEnergy = 0;
+
+  for (let bin = beepLowBin; bin <= beepHighBin && bin < spectrum.length; bin++) {
+    const mag = spectrum[bin];
+    totalEnergy += mag;
+    if (mag > peakMag) {
+      peakMag = mag;
+      peakBin = bin;
+    }
+  }
+
+  // Tonality: energy within ±3 bins of peak / total energy in band
+  // Pure tone → most energy near peak → high tonality
+  const peakRadius = 3;
+  let peakRegionEnergy = 0;
+  for (
+    let bin = Math.max(beepLowBin, peakBin - peakRadius);
+    bin <= Math.min(beepHighBin, peakBin + peakRadius) && bin < spectrum.length;
+    bin++
+  ) {
+    peakRegionEnergy += spectrum[bin];
+  }
+
+  const tonality = totalEnergy > 0 ? peakRegionEnergy / totalEnergy : 0;
+  const dominantFreq = peakBin * binResolution;
+
+  return { tonality, dominantFreq, totalEnergy };
+}
+
+/** Steps 2-4: find sustained tone runs, reject whistles, pick the best. */
+function selectBestRun(
+  frameTonality: number[],
+  frameDominantFreq: number[],
+  frameEnergy: number[],
+  numWindows: number,
+  sampleRate: number,
+  hopSize: number,
+): DetectedSignal | null {
   // --- Step 2: Find sustained high-tonality runs ---
   // Adaptive tonality threshold: we want frames that are clearly tonal
   const tonalityThreshold = 0.35;
@@ -88,14 +179,6 @@ export function detectStartSignal(audioBuffer: AudioBuffer): DetectedSignal | nu
   const minRunFrames = Math.ceil((0.15 * sampleRate) / hopSize);
   // Maximum gap allowed within a run (account for brief fluctuations)
   const maxGapFrames = 2;
-
-  interface ToneRun {
-    startFrame: number;
-    endFrame: number;
-    avgFreq: number;
-    avgTonality: number;
-    totalEnergy: number;
-  }
 
   const runs: ToneRun[] = [];
   let runStart = -1;
@@ -156,10 +239,10 @@ export function detectStartSignal(audioBuffer: AudioBuffer): DetectedSignal | nu
     const topCandidates = scored.filter((s) => s.score >= maxScore * 0.5);
     // Pick the latest among top candidates
     bestRun = topCandidates[topCandidates.length - 1].run;
-  } else if (runs.length > 0) {
-    // All runs were in whistle range; fall back to the last run overall
-    bestRun = runs[runs.length - 1];
   }
+  // If only whistle-range runs were found, do NOT fall back to a whistle — a
+  // whistle is not the start beep. Return null so the user sets the start
+  // manually, rather than presenting a confidently-wrong time.
 
   if (!bestRun) return null;
 
@@ -170,13 +253,21 @@ export function detectStartSignal(audioBuffer: AudioBuffer): DetectedSignal | nu
   return { time: timeInSeconds, confidence };
 }
 
+interface ToneRun {
+  startFrame: number;
+  endFrame: number;
+  avgFreq: number;
+  avgTonality: number;
+  totalEnergy: number;
+}
+
 function buildRun(
   startFrame: number,
   endFrame: number,
   frameDominantFreq: number[],
   frameTonality: number[],
   frameEnergy: number[],
-) {
+): ToneRun {
   let freqSum = 0;
   let tonalSum = 0;
   let energySum = 0;

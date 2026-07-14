@@ -98,14 +98,14 @@ export function VideoPlayer() {
         {/* Skia visuals underneath (read-only) ... */}
         {USE_SKIA_PREVIEW && (
           <StopwatchSkiaOverlay
-            videoWidth={videoMetadata?.width ?? 1920}
-            videoHeight={videoMetadata?.height ?? 1080}
+            videoWidth={videoMetadata?.width || 1920}
+            videoHeight={videoMetadata?.height || 1080}
           />
         )}
         {/* ... RN gesture/handle layer on top (chrome hidden when Skia is active) */}
         <StopwatchOverlay
-          videoWidth={videoMetadata?.width ?? 1920}
-          videoHeight={videoMetadata?.height ?? 1080}
+          videoWidth={videoMetadata?.width || 1920}
+          videoHeight={videoMetadata?.height || 1080}
           hideVisuals={USE_SKIA_PREVIEW}
         />
       </Pressable>

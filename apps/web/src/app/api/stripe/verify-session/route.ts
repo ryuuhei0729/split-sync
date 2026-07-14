@@ -84,8 +84,22 @@ async function updateSubscription(
     trial_end: number | null;
   },
 ) {
-  const status =
-    subscription.status === "trialing" ? "trialing" : "active";
+  // Only grant premium for a genuinely active/trialing subscription. A session
+  // can be "paid/complete" while the subscription is still incomplete, past_due,
+  // unpaid, etc.; forcing those to "active" premium (the old behaviour) granted
+  // access the customer hadn't actually paid for. Fail closed and let the
+  // webhook (handleSubscriptionUpdated) reconcile once the real status settles.
+  const ACTIVE_STATUSES = ["active", "trialing"];
+  if (!ACTIVE_STATUSES.includes(subscription.status)) {
+    return NextResponse.json(
+      {
+        error: "サブスクリプションがまだ有効化されていません",
+        subscriptionStatus: subscription.status,
+      },
+      { status: 409 },
+    );
+  }
+  const status = subscription.status === "trialing" ? "trialing" : "active";
   const { error } = await supabase
     .from("user_subscriptions")
     .update({

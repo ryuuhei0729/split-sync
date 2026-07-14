@@ -46,6 +46,16 @@ export function SplitsPanel() {
   const splitLimitReached = splitTimes.length >= maxSplits;
   const canFinish = raceDistance !== null && raceDistance > 0;
 
+  // Per-row lap = current split time − previous split time (by distance order),
+  // derived at display time so it stays correct after out-of-order recording or
+  // a removeSplit. Shown for every row (matches the mobile SplitsPanel).
+  const sortedByDistance = [...splitTimes].sort((a, b) => a.distance - b.distance);
+  const lapByDistance = new Map<number, number>();
+  for (let i = 0; i < sortedByDistance.length; i++) {
+    const prevTime = i === 0 ? 0 : sortedByDistance[i - 1].time;
+    lapByDistance.set(sortedByDistance[i].distance, sortedByDistance[i].time - prevTime);
+  }
+
   const handleRecord = () => {
     if (splitLimitReached) return;
     recordSplit(elapsed);
@@ -259,10 +269,10 @@ export function SplitsPanel() {
                   {formatTime(split.time)}
                 </span>
 
-                {/* Lap time (50m intervals only) */}
-                {split.lapTime !== null && (
+                {/* Lap = diff from the previous split (derived, shown for all rows) */}
+                {lapByDistance.has(split.distance) && (
                   <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
-                    {t("splits.lap")}: {formatTime(split.lapTime)}
+                    {t("splits.lap")}: {formatTime(lapByDistance.get(split.distance)!)}
                   </span>
                 )}
 

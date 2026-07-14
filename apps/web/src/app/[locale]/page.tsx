@@ -61,7 +61,7 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <SwimHubTimerIcon className="w-10 h-10 text-primary" />
-                <span className="text-lg font-bold tracking-tight">SwimHub Timer</span>
+                <span className="text-lg font-bold tracking-tight font-(family-name:--font-chakra-petch)">SwimHub Timer</span>
               </div>
               <StepIndicator currentStep="import" />
             </div>
@@ -88,7 +88,7 @@ export default function Home() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <SwimHubTimerIcon className="w-10 h-10 text-primary" />
-                <span className="text-lg font-bold tracking-tight">SwimHub Timer</span>
+                <span className="text-lg font-bold tracking-tight font-(family-name:--font-chakra-petch)">SwimHub Timer</span>
               </div>
               <StepIndicator currentStep="export" />
             </div>
@@ -124,7 +124,7 @@ export default function Home() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <SwimHubTimerIcon className="w-4 h-4 text-primary" />
-              <span className="font-semibold text-sm tracking-tight">SwimHub Timer</span>
+              <span className="font-semibold text-sm tracking-tight font-(family-name:--font-chakra-petch)">SwimHub Timer</span>
             </div>
             <StepIndicator currentStep="detect" />
           </div>

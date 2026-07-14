@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: 32,
-    fontWeight: "bold",
+    fontFamily: "ChakraPetch_700Bold",
     color: "#1E3A8A",
   },
   tagline: {

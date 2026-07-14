@@ -63,7 +63,7 @@ export function VideoImporter() {
       {/* Logo + title */}
       <div className="text-center space-y-3">
         <SwimHubTimerIcon className="w-28 h-28 mx-auto" />
-        <h1 className="text-3xl font-bold tracking-tight">SwimHub Timer</h1>
+        <h1 className="text-3xl font-bold tracking-tight font-(family-name:--font-chakra-petch)">SwimHub Timer</h1>
         <p className="text-muted-foreground text-sm max-w-xs mx-auto leading-relaxed">
           {t("import.subtitle")}
         </p>

@@ -2,10 +2,11 @@
 
 import { useCallback, useState } from "react";
 import { useEditorStore } from "@/stores/editor-store";
-import { exportVideoWithStopwatch } from "@/lib/video/export-pipeline";
+import { dispatchVideoExport } from "@/lib/video/export-dispatcher";
 import { renderFinishSummary } from "@/lib/stopwatch/renderer";
 import { useAuth } from "@/hooks/useAuth";
 import { canGuestUseToday, markGuestUsedToday } from "@/lib/guest-daily-limit";
+import { getAvailableResolutions } from "@swimhub-timer/shared";
 
 export function useVideoExport(showWatermark = true) {
   const {
@@ -63,6 +64,16 @@ export function useVideoExport(showWatermark = true) {
     setExportProgress(0);
     setOutputBlob(null);
 
+    // Plan-gating guard: the store's exportSettings.resolution can be a paywalled value
+    // (e.g. it defaults to "1080") that was never explicitly chosen by a free/guest user.
+    // Clamp to the highest resolution the plan actually allows right before dispatching so
+    // a stale/default selection can never bypass the plan gate.
+    const allowedResolutions = getAvailableResolutions(plan);
+    const clampedResolution = allowedResolutions.includes(exportSettings.resolution)
+      ? exportSettings.resolution
+      : allowedResolutions[allowedResolutions.length - 1];
+    const clampedExportSettings = { ...exportSettings, resolution: clampedResolution };
+
     try {
       // Render finish summary PNG if applicable
       let summaryBlob: Blob | null = null;
@@ -84,18 +95,26 @@ export function useVideoExport(showWatermark = true) {
         }
       }
 
-      const blob = await exportVideoWithStopwatch(
+      const result = await dispatchVideoExport({
         videoFile,
-        startTime,
+        startSignalTime: startTime,
         stopwatchConfig,
-        videoMetadata?.height ?? 0,
-        exportSettings,
-        (percent) => setExportProgress(percent),
+        originalVideoWidth: videoMetadata?.width ?? 0,
+        originalVideoHeight: videoMetadata?.height ?? 0,
+        exportSettings: clampedExportSettings,
+        onProgress: (percent: number) => setExportProgress(percent),
         showWatermark,
-        summaryBlob,
+        splitTimes,
+        isFinished,
         finishTime,
-      );
-      setOutputBlob(blob);
+        raceDistance,
+        summaryImageData: summaryBlob,
+      });
+      // Lightweight rollout signal (not user-facing, doesn't change the hook's public
+      // return shape): lets us see the WebCodecs-vs-ffmpeg-fallback split in real usage
+      // without wiring up full analytics yet.
+      console.info(`[useVideoExport] export completed via '${result.engine}' engine.`);
+      setOutputBlob(result.blob);
       await recordExportUsage();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
@@ -108,6 +127,7 @@ export function useVideoExport(showWatermark = true) {
     stopwatchConfig,
     videoMetadata,
     exportSettings,
+    plan,
     isFinished,
     finishTime,
     splitTimes,

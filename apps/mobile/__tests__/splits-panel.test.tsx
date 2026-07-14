@@ -24,22 +24,12 @@ import React from "react";
 
 describe("SplitsPanel - ゲスト時遷移先", () => {
   describe("ゲスト状態でスプリット上限に達した場合", () => {
-    it("should navigate to /(auth)/get-started when limit banner is pressed by guest", () => {
-      // [V-01] ゲストがスプリット上限バナーをタップすると /(auth)/get-started に遷移すること
-      // (現状は /(app)/paywall に遷移しているため、修正が必要)
-      // fireEvent.press(limitBanner);
-      // expect(mockRouterPush).toHaveBeenCalledWith("/(auth)/get-started");
-    });
+    it.todo("should navigate to /(auth)/get-started when limit banner is pressed by guest");
 
-    it("should NOT navigate to /(app)/paywall when guest taps limit banner", () => {
-      // [V-02] ゲストが上限バナーをタップしても paywall に遷移しないこと
-      // expect(mockRouterPush).not.toHaveBeenCalledWith("/(app)/paywall");
-    });
+    it.todo("should NOT navigate to /(app)/paywall when guest taps limit banner");
   });
 
   describe("Free ユーザーでスプリット上限に達した場合", () => {
-    it("should navigate to /(app)/paywall when limit banner is pressed by free user", () => {
-      // [V-03] Free ユーザーが上限バナーをタップすると /(app)/paywall に遷移すること (回帰確認)
-    });
+    it.todo("should navigate to /(app)/paywall when limit banner is pressed by free user");
   });
 });

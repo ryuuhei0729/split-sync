@@ -66,8 +66,12 @@ export default function ImportScreen() {
 
       setVideoUri(resolvedUri);
       setVideoMetadata({
-        width: asset.width ?? 0,
-        height: asset.height ?? 0,
+        // Fall back when the picker omits dimensions (some Android providers
+        // return undefined/0): a stored 0 would flow into Skia offscreen
+        // surfaces (MakeOffscreen(0,0) → null) and silently break every overlay
+        // render. 1920×1080 is a safe default when the real size is unknown.
+        width: asset.width || 1920,
+        height: asset.height || 1080,
         duration: (asset.duration ?? 0) / 1000,
         name: asset.fileName ?? "video",
       });

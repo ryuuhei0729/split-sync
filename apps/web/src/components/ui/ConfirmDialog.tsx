@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -29,11 +30,12 @@ export default function ConfirmDialog({
   onCancel,
   title,
   message,
-  confirmLabel = "確認",
-  cancelLabel = "キャンセル",
+  confirmLabel,
+  cancelLabel,
   variant = "info",
   isConfirming = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog
       open={isOpen}
@@ -48,14 +50,14 @@ export default function ConfirmDialog({
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabel ?? t("common.cancel")}
           </Button>
           <Button
             variant={variant === "danger" ? "destructive" : "default"}
             onClick={onConfirm}
             disabled={isConfirming}
           >
-            {isConfirming ? "処理中..." : confirmLabel}
+            {isConfirming ? t("common.processing") : (confirmLabel ?? t("common.confirm"))}
           </Button>
         </DialogFooter>
       </DialogContent>

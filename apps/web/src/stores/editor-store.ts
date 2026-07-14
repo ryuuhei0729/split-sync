@@ -15,6 +15,12 @@ interface EditorState {
   videoMetadata: VideoMetadata | null;
   audioBuffer: AudioBuffer | null;
   waveformData: Float32Array | null;
+  // Audio-decode state lives in the store (not in useAudioAnalysis' local
+  // useState) so the mobile + desktop layouts — both mounted at once, only
+  // CSS-hidden — share ONE in-flight guard and never decode the same file twice.
+  isAnalyzingAudio: boolean;
+  audioAnalysisError: string | null;
+  audioAnalysisAttempted: boolean;
   detectedSignalTime: number | null;
   startTime: number | null;
   isDetecting: boolean;
@@ -45,6 +51,9 @@ interface EditorState {
   setVideoMetadata: (metadata: VideoMetadata) => void;
   setAudioBuffer: (buffer: AudioBuffer) => void;
   setWaveformData: (data: Float32Array) => void;
+  setIsAnalyzingAudio: (analyzing: boolean) => void;
+  setAudioAnalysisError: (error: string | null) => void;
+  setAudioAnalysisAttempted: (attempted: boolean) => void;
   setDetectedSignalTime: (time: number | null) => void;
   setStartTime: (time: number | null) => void;
   setIsDetecting: (detecting: boolean) => void;
@@ -71,6 +80,9 @@ const initialState = {
   videoMetadata: null as VideoMetadata | null,
   audioBuffer: null as AudioBuffer | null,
   waveformData: null as Float32Array | null,
+  isAnalyzingAudio: false,
+  audioAnalysisError: null as string | null,
+  audioAnalysisAttempted: false,
   detectedSignalTime: null as number | null,
   startTime: null as number | null,
   isDetecting: false,
@@ -98,7 +110,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const prevUrl = get().videoUrl;
     if (prevUrl) URL.revokeObjectURL(prevUrl);
     const videoUrl = URL.createObjectURL(file);
-    set({ videoFile: file, videoUrl, step: "detect" });
+    // Reset all audio/detection state so a replaced video is re-analyzed
+    // instead of reusing the previous clip's buffer/attempted flag.
+    set({
+      videoFile: file,
+      videoUrl,
+      step: "detect",
+      audioBuffer: null,
+      waveformData: null,
+      isAnalyzingAudio: false,
+      audioAnalysisError: null,
+      audioAnalysisAttempted: false,
+      detectedSignalTime: null,
+      startTime: null,
+    });
   },
 
   clearVideo: () => {
@@ -113,6 +138,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setVideoMetadata: (metadata) => set({ videoMetadata: metadata }),
   setAudioBuffer: (buffer) => set({ audioBuffer: buffer }),
   setWaveformData: (data) => set({ waveformData: data }),
+  setIsAnalyzingAudio: (analyzing) => set({ isAnalyzingAudio: analyzing }),
+  setAudioAnalysisError: (error) => set({ audioAnalysisError: error }),
+  setAudioAnalysisAttempted: (attempted) => set({ audioAnalysisAttempted: attempted }),
   setDetectedSignalTime: (time) => set({ detectedSignalTime: time }),
   setStartTime: (time) => set({ startTime: time }),
   setIsDetecting: (detecting) => set({ isDetecting: detecting }),
@@ -145,21 +173,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (isNaN(distance) || distance <= 0) return;
     if (splitTimes.some((s) => s.distance === distance)) return;
 
-    let lapTime: number | null = null;
-    if (distance % 50 === 0) {
-      const prevFiftyMark = distance - 50;
-      if (prevFiftyMark <= 0) {
-        lapTime = elapsedSeconds;
-      } else {
-        const prevSplit = splitTimes.find((s) => s.distance === prevFiftyMark);
-        lapTime = prevSplit ? elapsedSeconds - prevSplit.time : null;
-      }
-    }
-
+    // lapTime is derived at display time (SplitsPanel / calculateRaceLapTimesTable)
+    // as the diff from the previous split. Computing it here at record time made
+    // it stale after out-of-order recording or a removeSplit, and diverged from
+    // mobile. Kept in the type for compatibility but no longer populated.
     const newSplit: SplitTime = {
       distance,
       time: elapsedSeconds,
-      lapTime,
+      lapTime: null,
       memo: currentMemoInput.trim(),
     };
     const updated = [...splitTimes, newSplit].sort((a, b) => a.distance - b.distance);

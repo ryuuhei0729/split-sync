@@ -148,9 +148,9 @@ export function detectStartSignal(audioData: AudioData): DetectedSignal | null {
     const maxScore = Math.max(...scored.map((s) => s.score));
     const topCandidates = scored.filter((s) => s.score >= maxScore * 0.5);
     bestRun = topCandidates[topCandidates.length - 1].run;
-  } else if (runs.length > 0) {
-    bestRun = runs[runs.length - 1];
   }
+  // If only whistle-range runs were found, do NOT fall back to a whistle — it's
+  // not the start beep. Return null so the user sets the start manually.
 
   if (!bestRun) return null;
 

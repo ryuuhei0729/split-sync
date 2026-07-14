@@ -97,9 +97,11 @@ export default function EditorScreen() {
           TextInput into view. Android relies on the manifest's
           windowSoftInputMode=adjustResize. */}
       {activeTab === "signal" ? (
-        <View style={styles.tabContent}>
+        // Scrollable so the confirm button stays reachable on short screens
+        // (the 16:9 video section leaves little room below the tab bar).
+        <ScrollView style={styles.tabContent}>
           <SignalDetector onConfirm={handleSignalConfirm} />
-        </View>
+        </ScrollView>
       ) : (
         <ScrollView
           style={styles.tabContent}

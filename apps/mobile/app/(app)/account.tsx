@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { View, Text, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, Linking } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  StyleSheet,
+  Linking,
+  Platform,
+  ScrollView,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
@@ -124,7 +134,7 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <View style={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {/* User info */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("auth.accountInfo")}</Text>
@@ -280,7 +290,15 @@ export default function AccountScreen() {
         {/* サブスクリプション管理 */}
         <TouchableOpacity
           style={styles.manageSubButton}
-          onPress={() => Linking.openURL("https://apps.apple.com/account/subscriptions")}
+          onPress={() =>
+            Linking.openURL(
+              Platform.select({
+                ios: "https://apps.apple.com/account/subscriptions",
+                android: "https://play.google.com/store/account/subscriptions",
+                default: "https://apps.apple.com/account/subscriptions",
+              }),
+            )
+          }
         >
           <Text style={styles.manageSubText}>{t("account.manageSubscription")}</Text>
         </TouchableOpacity>
@@ -308,7 +326,7 @@ export default function AccountScreen() {
             {t("common.appName")} v{appVersion}
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -318,8 +336,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  content: {
+    // flexGrow (not flex) so the footer's marginTop:"auto" still bottom-pins
+    // on tall screens while short screens can scroll
+    flexGrow: 1,
     padding: spacing.lg,
   },
   section: {
