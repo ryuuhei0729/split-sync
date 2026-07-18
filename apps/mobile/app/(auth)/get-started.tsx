@@ -132,6 +132,7 @@ export default function GetStartedScreen() {
             disabled={isLoading}
             accessibilityRole="button"
             accessibilityLabel={t("auth.continueAsGuest")}
+            testID="get-started-guest-button"
           >
             <Text style={styles.guestButtonText}>{t("auth.continueAsGuest")}</Text>
           </Pressable>

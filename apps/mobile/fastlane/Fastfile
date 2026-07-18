@@ -1,0 +1,59 @@
+default_platform(:ios)
+
+# App Store Connect API キー (SwimHub ルートの AuthKey_Y9S6G7KW9V.p8 / git 管理外)
+ASC_KEY_ID    = ENV["ASC_KEY_ID"]    || "Y9S6G7KW9V"
+ASC_KEY_PATH  = ENV["ASC_KEY_PATH"]  || "/Users/ryuuhei_0729/SwimHub/AuthKey_Y9S6G7KW9V.p8"
+ASC_ISSUER_ID = ENV["ASC_ISSUER_ID"] || "6a00eab9-1ee2-474d-82a1-6ec27420ef53"
+
+# 2026-07 に追加した新ロケール。既存 (ja) には触れない
+NEW_LANGUAGES = ["en-US", "ko", "zh-Hans", "de-DE"]
+
+def swimhub_api_key
+  UI.user_error!("ASC キーが見つかりません: #{ASC_KEY_PATH}") unless File.exist?(ASC_KEY_PATH)
+  app_store_connect_api_key(
+    key_id: ASC_KEY_ID,
+    issuer_id: ASC_ISSUER_ID,
+    key_filepath: ASC_KEY_PATH,
+    in_house: false
+  )
+end
+
+platform :ios do
+  desc "新ロケールのメタデータ (概要/キーワード等) を App Store Connect にアップロード"
+  lane :upload_metadata do |options|
+    languages = options[:languages] || NEW_LANGUAGES
+    deliver(
+      api_key: swimhub_api_key,
+      app_identifier: "com.swimhubtimer.app",
+      metadata_path: File.expand_path("./metadata", __dir__),
+      languages: languages,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_app_version_update: true,
+      run_precheck_before_submit: false,
+      submit_for_review: false,
+      force: true
+    )
+  end
+
+  desc "スクショ (素のまま) を App Store Connect にアップロード"
+  desc "options: languages (default: 新ロケールのみ)"
+  lane :upload_screenshots do |options|
+    languages = options[:languages] || NEW_LANGUAGES
+    deliver(
+      api_key: swimhub_api_key,
+      app_identifier: "com.swimhubtimer.app",
+      screenshots_path: File.expand_path("./screenshots", __dir__),
+      languages: languages,
+      # スクショのみ更新（バイナリ・メタデータ・バージョンには触れない）
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      overwrite_screenshots: true,
+      sync_screenshots: true,
+      run_precheck_before_submit: false,
+      submit_for_review: false,
+      force: true # HTML プレビューの確認をスキップ（CI/非対話実行用）
+    )
+  end
+end

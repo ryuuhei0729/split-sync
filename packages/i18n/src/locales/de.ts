@@ -197,6 +197,26 @@ const de: TranslationShape = {
     switchToSignIn: "Schon ein Konto? Hier anmelden",
     emailPlaceholder: "E-Mail-Adresse",
     passwordPlaceholder: "Passwort",
+    forgotPasswordLink: "Passwort vergessen?",
+    forgotPassword: {
+      title: "Passwort vergessen?",
+      subtitle:
+        "Gib deine registrierte E-Mail-Adresse ein. Wir senden dir einen Link zum Zurücksetzen deines Passworts.",
+      submit: "Link zum Zurücksetzen senden",
+      successMessage:
+        "Wir haben einen Link zum Zurücksetzen des Passworts an die eingegebene E-Mail-Adresse gesendet. Prüfe ggf. auch deinen Spam-Ordner.",
+    },
+    resetPassword: {
+      title: "Neues Passwort festlegen",
+      subtitle: "Gib ein neues Passwort für dein Konto ein.",
+      newPasswordLabel: "Neues Passwort",
+      confirmPasswordLabel: "Neues Passwort bestätigen",
+      submit: "Passwort aktualisieren",
+      invalidTitle: "Der Link ist abgelaufen",
+      invalidMessage:
+        "Dieser Link ist ungültig oder abgelaufen. Bitte fordere einen neuen Link zum Zurücksetzen des Passworts an.",
+      invalidCta: "Neuen Link anfordern",
+    },
     confirmationSent: "Bestätigungs-E-Mail gesendet. Bitte prüfe dein Postfach.",
     confirmEmailSent: "Bestätigungs-E-Mail gesendet",
     confirmEmailDesc:
@@ -245,6 +265,7 @@ const de: TranslationShape = {
       passwordMissingUppercase: "Das Passwort muss einen Großbuchstaben enthalten",
       passwordMissingDigit: "Das Passwort muss eine Zahl enthalten",
       passwordMissingSymbol: "Das Passwort muss ein Sonderzeichen enthalten",
+      passwordMismatch: "Die Passwörter stimmen nicht überein",
       cancelled: "Authentifizierung wurde abgebrochen",
       generic: "Authentifizierung fehlgeschlagen. Bitte versuche es erneut.",
       appleLoginFailed: "Apple-Anmeldung fehlgeschlagen. Bitte versuche es erneut.",

@@ -1,0 +1,6 @@
+# deliver の既定値（lane 側で上書きするものは最小限に）
+app_identifier("com.swimhubtimer.app")
+overwrite_screenshots(true)
+run_precheck_before_submit(false)
+submit_for_review(false)
+force(true)

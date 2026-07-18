@@ -1,0 +1,4 @@
+app_identifier("com.swimhubtimer.app")
+# App Store Connect 認証は API キー(.p8)を使うため apple_id/team_id は不要。
+# 必要になった場合のみ下記を有効化:
+# apple_id("ryuuhei.hosoi@gmail.com")

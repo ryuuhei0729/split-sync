@@ -197,6 +197,24 @@ const en: TranslationShape = {
     switchToSignIn: "Already have an account? Sign in",
     emailPlaceholder: "Email address",
     passwordPlaceholder: "Password",
+    forgotPasswordLink: "Forgot your password?",
+    forgotPassword: {
+      title: "Forgot your password?",
+      subtitle: "Enter your registered email address and we'll send you a link to reset your password.",
+      submit: "Send reset email",
+      successMessage:
+        "If an account exists for that email address, we've sent a password reset link. If you don't see it, please check your spam folder.",
+    },
+    resetPassword: {
+      title: "Set a new password",
+      subtitle: "Enter a new password for your account.",
+      newPasswordLabel: "New password",
+      confirmPasswordLabel: "Confirm new password",
+      submit: "Update password",
+      invalidTitle: "This link has expired",
+      invalidMessage: "This link is invalid or has expired. Please request a new password reset.",
+      invalidCta: "Request a new link",
+    },
     confirmationSent: "Confirmation email sent. Please check your inbox.",
     confirmEmailSent: "Confirmation email sent",
     confirmEmailDesc:
@@ -245,6 +263,7 @@ const en: TranslationShape = {
       passwordMissingUppercase: "Password must contain an uppercase letter",
       passwordMissingDigit: "Password must contain a number",
       passwordMissingSymbol: "Password must contain a symbol",
+      passwordMismatch: "Passwords do not match",
       cancelled: "Authentication was cancelled",
       generic: "Authentication failed. Please try again.",
       appleLoginFailed: "Apple login failed. Please try again.",

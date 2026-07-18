@@ -129,6 +129,15 @@ export default function EmailLoginScreen() {
                   <Text style={styles.submitButtonText}>{t("auth.signIn")}</Text>
                 )}
               </Pressable>
+
+              <Pressable
+                style={styles.forgotPasswordLink}
+                onPress={() => router.push("/(auth)/forgot-password")}
+                accessibilityRole="button"
+                accessibilityLabel={t("auth.forgotPasswordLink")}
+              >
+                <Text style={styles.forgotPasswordLinkText}>{t("auth.forgotPasswordLink")}</Text>
+              </Pressable>
             </View>
           </View>
         </ScrollView>
@@ -236,5 +245,14 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  forgotPasswordLink: {
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+  },
+  forgotPasswordLinkText: {
+    color: colors.primary,
+    fontSize: fontSize.sm,
+    fontWeight: "500",
   },
 });

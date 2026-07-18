@@ -155,6 +155,7 @@ export default function ImportScreen() {
             ]}
             onPress={pickVideo}
             disabled={loading}
+            testID="home-select-video-button"
           >
             <View style={styles.ctaIconCircle}>
               <Ionicons name="videocam-outline" size={36} color={colors.primary} />

@@ -1,0 +1,21 @@
+SwimHub Timer legt eine Stoppuhr über deine Schwimmrennen-Videos und exportiert das Ergebnis.
+Hauptfunktionen
+■ Automatische Startsignal-Erkennung
+Analysiert die Tonspur deines Rennvideos per FFT und erkennt das Startsignal (Elektronikton oder Startschuss) automatisch. Manuelle Feinjustierung ist ebenfalls möglich.
+■ Stoppuhr-Overlay
+Zeigt ab dem erkannten Startpunkt eine Stoppuhr im Video an. Schriftgröße, Farbe, Deckkraft und Position lassen sich frei anpassen.
+■ Zwischenzeiten-Verwaltung
+Füge mehrere Zwischenzeiten hinzu und bearbeite sie. Zeige die Zeiten für Wenden und Anschlag direkt im Video an.
+■ Videoexport in hoher Qualität
+Exportiere in Originalqualität, 1080p oder 720p. Speichere das Ergebnis in deiner Fotomediathek oder teile es direkt.
+
+Für wen ist die App?
+- Wettkampfschwimmer, die ihre Rennvideos auswerten möchten
+- Trainer, die die Zeiten ihrer Schwimmer im Video sichtbar machen möchten
+- Eltern, die Videos von Wettkämpfen und Training festhalten möchten
+
+Datenschutz
+Die gesamte Videoverarbeitung findet auf deinem Gerät statt. Deine Videos und persönlichen Daten werden niemals an externe Server gesendet.
+
+Nutzungsbedingungen: https://timer.swim-hub.app/terms
+Datenschutzerklärung: https://timer.swim-hub.app/privacy
