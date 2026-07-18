@@ -152,6 +152,7 @@ export function SignalDetector({ onConfirm }: SignalDetectorProps) {
         <Pressable
           style={({ pressed }) => [styles.autoDetectBtn, pressed && styles.autoDetectBtnPressed]}
           onPress={runAutoDetect}
+          testID="signal-auto-detect-button"
         >
           <Ionicons name="scan" size={24} color={colors.primary} />
           <View>

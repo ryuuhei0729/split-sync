@@ -1,0 +1,60 @@
+# エディタ（出発信号タブ）— アプリの看板画面
+# ホームから動画を選択し、動画プレビュー + 音声波形（出発信号検出）を撮影する。
+#
+# 前提: シミュレータのフォトライブラリに動画が1本以上あること。
+#   見栄えを良くするには、事前に水泳のデモ動画を入れておく:
+#     xcrun simctl addmedia booted demo-swim.mov
+#
+# 注意: 動画選択は iOS システムのフォトピッカー (PHPicker) で、testID が使えないため
+#   グリッド先頭セルを座標 (%) でタップしている。デバイスサイズを変えて失敗する場合は
+#   この座標を調整すること。
+#
+# 必要な env: APP_ID, LOCALE, REGION, OUTPUT_DIR, DEVICE_TAG
+appId: ${APP_ID}
+---
+- runFlow: ../subflows/launch.yaml
+
+# 動画選択 → フォトピッカーが開くのを待つ
+- tapOn:
+    id: "home-select-video-button"
+- waitForAnimationToEnd:
+    timeout: 8000
+
+# ピッカー（iOS システム PHPicker）のグリッド先頭セルを座標でタップする。
+# ピッカーがまだ操作可能になっていないとタップが空振りするため、波形が出るまで
+# 最大 3 回リトライする（editor 遷移後は signal-waveform が可視になりループ終了）。
+# testID が使えないため座標指定。デバイス差で外れる場合はこの % を調整。
+- repeat:
+    times: 3
+    while:
+      notVisible:
+        id: "signal-waveform"
+    commands:
+      - tapOn:
+          point: ${PICK_POINT}
+      - extendedWaitUntil:
+          visible:
+            id: "signal-waveform"
+          timeout: 25000
+          optional: true
+
+# 波形が表示されていることを確定
+- extendedWaitUntil:
+    visible:
+      id: "signal-waveform"
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# デモ動画に出発信号（ブザー音）が含まれる場合は、以下を有効化すると
+# 検出済みタイム + 微調整 UI まで写ってより訴求力が上がる（信号が無いとエラー表示になる）。
+# - tapOn:
+#     id: "signal-auto-detect-button"
+# - extendedWaitUntil:
+#     visible:
+#       id: "signal-waveform"
+#     timeout: 30000
+# - waitForAnimationToEnd:
+#     timeout: 5000
+
+- takeScreenshot: ${OUTPUT_DIR}/${DEVICE_TAG}_02_editor_signal

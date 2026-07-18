@@ -9,6 +9,7 @@ import {
   logoutRevenueCat,
   addCustomerInfoUpdateListener,
 } from "../lib/revenucat";
+import { setPasswordRecoveryPending } from "../lib/passwordRecovery";
 
 export type AuthContextType = TimerMobileAuthContextType;
 
@@ -88,6 +89,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setSubscription(null);
       setGuestMode(false);
+      // サインアウト後に stale なリカバリー保留フラグが残ると、次に別アカウント
+      // で通常ログインした際 AuthGate が誤って reset-password へ誘導してしまう。
+      setPasswordRecoveryPending(false);
       clearMmkvCaches();
 
       try {

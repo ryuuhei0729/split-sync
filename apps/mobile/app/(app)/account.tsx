@@ -134,7 +134,11 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        testID="account-screen"
+      >
         {/* User info */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("auth.accountInfo")}</Text>

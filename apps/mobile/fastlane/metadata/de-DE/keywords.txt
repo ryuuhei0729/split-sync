@@ -1,0 +1,1 @@
+schwimmen,stoppuhr,timer,video,overlay,rennen,zwischenzeit,wettkampf,schwimmtraining,zeitmessung

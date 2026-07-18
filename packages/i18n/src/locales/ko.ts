@@ -196,6 +196,24 @@ const ko: TranslationShape = {
     switchToSignIn: "계정이 있으신 분은 여기로",
     emailPlaceholder: "이메일 주소",
     passwordPlaceholder: "비밀번호",
+    forgotPasswordLink: "비밀번호를 잊으셨나요?",
+    forgotPassword: {
+      title: "비밀번호를 잊으셨나요?",
+      subtitle: "등록된 이메일 주소를 입력하시면 비밀번호 재설정 링크를 보내드립니다.",
+      submit: "재설정 메일 보내기",
+      successMessage:
+        "입력하신 이메일 주소로 등록된 계정이 있는 경우, 비밀번호 재설정 링크를 보내드렸습니다. 메일이 도착하지 않으면 스팸 폴더도 확인해 주세요.",
+    },
+    resetPassword: {
+      title: "새 비밀번호 설정",
+      subtitle: "계정의 새 비밀번호를 입력해 주세요.",
+      newPasswordLabel: "새 비밀번호",
+      confirmPasswordLabel: "새 비밀번호 확인",
+      submit: "비밀번호 업데이트",
+      invalidTitle: "링크가 만료되었습니다",
+      invalidMessage: "링크가 유효하지 않거나 만료되었습니다. 비밀번호 재설정을 다시 시도해 주세요.",
+      invalidCta: "비밀번호 재설정 다시 시도",
+    },
     confirmationSent: "확인 이메일을 보냈습니다. 메일함을 확인해 주세요.",
     confirmEmailSent: "확인 이메일 발송",
     confirmEmailDesc:
@@ -244,6 +262,7 @@ const ko: TranslationShape = {
       passwordMissingUppercase: "비밀번호에 대문자를 포함해 주세요",
       passwordMissingDigit: "비밀번호에 숫자를 포함해 주세요",
       passwordMissingSymbol: "비밀번호에 기호를 포함해 주세요",
+      passwordMismatch: "비밀번호가 일치하지 않습니다",
       cancelled: "인증이 취소되었습니다",
       generic: "인증에 실패했습니다. 다시 시도해 주세요.",
       appleLoginFailed: "Apple 로그인에 실패했습니다. 다시 시도해 주세요.",

@@ -38,6 +38,21 @@
         "EXPO_PUBLIC_REVENUCAT_ANDROID_API_KEY": "REPLACE_WITH_GOOG_ANDROID_KEY"
       }
     },
+    "screenshot": {
+      "environment": "production",
+      "ios": {
+        "simulator": true,
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      },
+      "env": {
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
+        "EXPO_PUBLIC_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://kolhxtkxlkkorcfzyadk.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvbGh4dGt4bGtrb3JjZnp5YWRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MDI2NzYsImV4cCI6MjA3MjM3ODY3Nn0.yOKJ7Vt3lZf_-b0vuT_re-RBUlH0QgPD811f7LzZRE4",
+        "EXPO_PUBLIC_REVENUCAT_IOS_API_KEY": "appl_zAdBvYvIPkdtlYnrBvdKbQXgGuq",
+        "EXPO_PUBLIC_REVENUCAT_ANDROID_API_KEY": "REPLACE_WITH_GOOG_ANDROID_KEY"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "ios": {

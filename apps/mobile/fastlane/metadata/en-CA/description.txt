@@ -1,0 +1,21 @@
+SwimHub Timer overlays a stopwatch on your swimming race videos and lets you export the result.
+Key Features
+■ Automatic start signal detection
+Analyzes your race video's audio with FFT to automatically detect the start signal (electronic beep or starting gun). Manual fine-tuning is also available.
+■ Stopwatch overlay
+Displays a stopwatch on the video from the detected start point. Freely customize font size, color, opacity, and position.
+■ Lap time management
+Add and edit multiple split times. Show turn and finish splits right on the video.
+■ High-quality video export
+Export in original quality, 1080p, or 720p. Save to your camera roll or share instantly.
+
+Who it's for
+- Competitive swimmers who want to review their race footage
+- Coaches who want to visualize swimmers' times on video
+- Parents who want to keep videos of meets and practice
+
+Privacy
+All video processing happens entirely on your device. Your videos and personal data are never sent to external servers.
+
+Terms of Service: https://timer.swim-hub.app/terms
+Privacy Policy: https://timer.swim-hub.app/privacy

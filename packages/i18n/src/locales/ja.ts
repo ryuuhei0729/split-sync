@@ -194,6 +194,24 @@ const ja = {
     switchToSignIn: "アカウントをお持ちの方はこちら",
     emailPlaceholder: "メールアドレス",
     passwordPlaceholder: "パスワード",
+    forgotPasswordLink: "パスワードをお忘れですか？",
+    forgotPassword: {
+      title: "パスワードをお忘れですか？",
+      subtitle: "登録済みのメールアドレスを入力してください。パスワード再設定用のメールをお送りします。",
+      submit: "再設定メールを送信",
+      successMessage:
+        "ご入力いただいたメールアドレスのアカウントが存在する場合、パスワード再設定用のメールを送信しました。メールが届かない場合は、迷惑メールフォルダもご確認ください。",
+    },
+    resetPassword: {
+      title: "新しいパスワードを設定",
+      subtitle: "アカウントの新しいパスワードを入力してください。",
+      newPasswordLabel: "新しいパスワード",
+      confirmPasswordLabel: "新しいパスワード（確認）",
+      submit: "パスワードを更新",
+      invalidTitle: "リンクの有効期限が切れています",
+      invalidMessage: "リンクの有効期限が切れているか、無効です。もう一度パスワード再設定をお試しください。",
+      invalidCta: "パスワード再設定をやり直す",
+    },
     confirmationSent: "確認メールを送信しました。メールをご確認ください。",
     confirmEmailSent: "確認メール送信",
     confirmEmailDesc:
@@ -242,6 +260,7 @@ const ja = {
       passwordMissingUppercase: "パスワードに大文字を含めてください",
       passwordMissingDigit: "パスワードに数字を含めてください",
       passwordMissingSymbol: "パスワードに記号を含めてください",
+      passwordMismatch: "パスワードが一致しません",
       cancelled: "認証がキャンセルされました",
       generic: "認証に失敗しました。もう一度お試しください。",
       appleLoginFailed: "Appleログインに失敗しました。もう一度お試しください。",

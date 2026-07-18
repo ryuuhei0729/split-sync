@@ -1,0 +1,39 @@
+# 共通起動サブフロー
+#
+# - SwimHub Timer はゲストモードで主要機能（動画取り込み→計測→書き出し）が全て使えるため、
+#   ログインせず「ゲストとして続ける」で初回ゲート (get-started) を突破する。
+#   swim-hub の login.yaml に相当するが、この方針のため APP_EMAIL / APP_PASSWORD は不要。
+# - 端末ロケールは launchApp の launch arguments (-AppleLanguages / -AppleLocale) で指定する。
+#   expo-localization はこの引数を尊重するため、シミュレータの言語設定を変えなくても
+#   アプリ全体が ${LOCALE} で表示される（fastlane snapshot と同じ仕組み）。
+# - 2回目以降（AsyncStorage にゲストフラグ/セッションが残っている）は get-started を
+#   スキップし、そのままホームの表示を待つ。
+#
+# 必要な env: APP_ID, LOCALE(例 ja/en), REGION(例 JP/US)
+appId: ${APP_ID}
+---
+- launchApp:
+    appId: ${APP_ID}
+    arguments:
+      "-AppleLanguages": "(${LOCALE})"
+      "-AppleLocale": "${LOCALE}_${REGION}"
+    clearState: false
+
+# AuthGate のリダイレクト（ローディング→get-started）が落ち着くのを待つ
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# 初回ゲート (get-started) が出ていたら「ゲストとして続ける」で入る
+- runFlow:
+    when:
+      visible:
+        id: "get-started-guest-button"
+    commands:
+      - tapOn:
+          id: "get-started-guest-button"
+
+# ホーム（動画取り込み画面）が出るまで待つ
+- extendedWaitUntil:
+    visible:
+      id: "home-select-video-button"
+    timeout: 40000

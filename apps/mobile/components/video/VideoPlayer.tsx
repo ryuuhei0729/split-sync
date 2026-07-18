@@ -93,6 +93,10 @@ export function VideoPlayer() {
             style={styles.video}
             contentFit="contain"
             nativeControls={false}
+            // Android's default SurfaceView ignores z-order/overflow/borderRadius and
+            // punches through the Skia/gesture overlays below it. textureView avoids
+            // that; no-op on iOS.
+            surfaceType="textureView"
           />
         )}
         {/* Skia visuals underneath (read-only) ... */}

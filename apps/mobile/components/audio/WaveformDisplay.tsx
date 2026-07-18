@@ -39,6 +39,7 @@ export function WaveformDisplay({
 
   return (
     <View
+      testID="signal-waveform"
       style={styles.container}
       onLayout={onLayout}
       onStartShouldSetResponder={() => !!onSeek}

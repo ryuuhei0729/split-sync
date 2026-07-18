@@ -2,7 +2,8 @@ import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { localizeAuthError } from "../utils/authErrorLocalizer";
-import { getRedirectUri } from "../lib/google-auth";
+import { getRedirectUri, getPasswordRecoveryRedirectUri } from "../lib/google-auth";
+import { setPasswordRecoveryPending } from "../lib/passwordRecovery";
 
 export function useEmailAuth() {
   const { t } = useTranslation();
@@ -74,11 +75,67 @@ export function useEmailAuth() {
     [t],
   );
 
+  // メールアドレス列挙攻撃を避けるため、成功/失敗を問わず常に true を返す
+  // (Supabase 自体もアカウントの有無を resetPasswordForEmail のレスポンスで
+  // 露呈しないが、念のためクライアント側でも例外を握りつぶす)。
+  const sendPasswordResetEmail = useCallback(
+    async (email: string): Promise<boolean> => {
+      if (!supabase) {
+        setError(t("auth.errors.notInitialized"));
+        return false;
+      }
+      try {
+        setLoading(true);
+        setError(null);
+        await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: getPasswordRecoveryRedirectUri(),
+        });
+      } catch {
+        // 意図的に握りつぶす: エラー内容によってアカウントの存在有無が
+        // 推測できてしまうため、成功時と同じ画面を表示する。
+      } finally {
+        setLoading(false);
+      }
+      return true;
+    },
+    [t],
+  );
+
+  const updatePassword = useCallback(
+    async (newPassword: string): Promise<boolean> => {
+      if (!supabase) {
+        setError(t("auth.errors.notInitialized"));
+        return false;
+      }
+      try {
+        setLoading(true);
+        setError(null);
+        const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+        if (authError) {
+          setError(localizeAuthError(authError.message, t));
+          return false;
+        }
+        // 更新が完了したらリカバリーセッション扱いを解除し、通常ログイン
+        // 済みユーザーとして AuthGate がメイン画面へ遷移できるようにする。
+        setPasswordRecoveryPending(false);
+        return true;
+      } catch {
+        setError(t("auth.errors.generic"));
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [t],
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   return {
     signInWithEmail,
     signUpWithEmail,
+    sendPasswordResetEmail,
+    updatePassword,
     loading,
     error,
     clearError,
