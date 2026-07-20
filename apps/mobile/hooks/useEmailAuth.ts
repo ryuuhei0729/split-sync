@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { localizeAuthError } from "../utils/authErrorLocalizer";
-import { getRedirectUri, getPasswordRecoveryRedirectUri } from "../lib/google-auth";
+import { getRedirectUri } from "../lib/google-auth";
 import { setPasswordRecoveryPending } from "../lib/passwordRecovery";
 
 export function useEmailAuth() {
@@ -87,8 +87,12 @@ export function useEmailAuth() {
       try {
         setLoading(true);
         setError(null);
+        // redirectTo はクエリなしで統一する。Supabase のメールテンプレートが
+        // `?token_hash=...&type=recovery` を付加するため、クエリ付きだと
+        // `?` が二重になりリンクが壊れる。フロー判別はリンクの `type` で行う
+        // (root layout の completeAuthDeepLink 参照)。
         await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: getPasswordRecoveryRedirectUri(),
+          redirectTo: getRedirectUri(),
         });
       } catch {
         // 意図的に握りつぶす: エラー内容によってアカウントの存在有無が

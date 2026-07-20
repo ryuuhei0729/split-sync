@@ -39,6 +39,9 @@ const ERROR_CODE_KEYS: Record<string, string> = {
   phone_not_found: "auth.errors.phoneNotFound",
   invalid_otp: "auth.errors.invalidOtp",
   expired_otp: "auth.errors.expiredOtp",
+  // Supabase実エラーコード（verifyOtp失敗時）。expired_otp は語順が実コードと逆のため追加
+  otp_expired: "auth.errors.expiredOtp",
+  otp_disabled: "auth.errors.invalidOtp",
   too_many_requests: "auth.errors.tooManyRequests",
   rate_limit_exceeded: "auth.errors.rateLimitExceeded",
 };

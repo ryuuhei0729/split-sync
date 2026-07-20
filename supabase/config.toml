@@ -1,3 +1,21 @@
+# A string used to distinguish different Supabase projects on the same host.
+project_id = "swimhub-timer"
+
+# メール確認は token_hash + verifyOtp フローに統一（PKCE code verifierを使わない）。
+# timer/scanner は同一 Supabase プロジェクトを共有するため、テンプレートは
+# リダイレクト先アプリに依存しない {{ .RedirectTo }} ベースの汎用形式で統一する。
+[auth.email.template.confirmation]
+subject = "Confirm your email"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new email"
+content_path = "./supabase/templates/email_change.html"
+
 # Edge Functions
 # Stripe / RevenueCat からの Webhook は Supabase JWT を送らず、
 # 各ハンドラ内で署名検証を行うため JWT 検証を無効化する。

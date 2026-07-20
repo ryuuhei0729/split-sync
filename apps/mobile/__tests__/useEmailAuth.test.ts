@@ -28,7 +28,6 @@ jest.mock("../lib/supabase", () => ({
 
 jest.mock("../lib/google-auth", () => ({
   getRedirectUri: () => "swimhubtimer://auth/callback",
-  getPasswordRecoveryRedirectUri: () => "swimhubtimer://auth/callback?flow=password-recovery",
 }));
 
 const mockResetPasswordForEmail = supabase?.auth.resetPasswordForEmail as jest.Mock;
@@ -50,8 +49,11 @@ describe("useEmailAuth - sendPasswordResetEmail", () => {
     });
 
     expect(success).toBe(true);
+    // QA Phase B 更新: redirectTo は token_hash + type ベースのメールテンプレートに
+    // 統一されたため、クエリなしの URI を渡す仕様に変更 (旧 ?flow=password-recovery は廃止)。
+    // フロー判別は completeAuthDeepLink 側でリンクの type を見て行う。
     expect(mockResetPasswordForEmail).toHaveBeenCalledWith("user@example.com", {
-      redirectTo: "swimhubtimer://auth/callback?flow=password-recovery",
+      redirectTo: "swimhubtimer://auth/callback",
     });
   });
 
