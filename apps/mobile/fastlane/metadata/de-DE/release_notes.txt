@@ -1,0 +1,4 @@
+• Funktion zum Zurücksetzen des Passworts hinzugefügt
+• Videoexport verbessert
+• Konto- und Editor-Ansicht überarbeitet
+• Stabilität verbessert und kleinere Fehler behoben
