@@ -13,15 +13,21 @@ export const getRedirectUri = (): string => {
 };
 
 /**
- * パスワードリセット専用のリダイレクトURI。
- * PKCE フローでは code の交換がセッションの用途 (通常ログイン vs リカバリー) を
- * URL からは判別できないため、`flow=password-recovery` をクエリに付与して
- * completeAuthDeepLink (root layout) が確実に判別できるようにする。
- * Supabase は redirectTo の既存クエリを保持したまま code/token を付加する。
+ * Supabase メールテンプレートの `token_hash` 形式で使われる検証タイプ。
+ * `invite` は本アプリのフローで使わないため対象外とする。
  */
-export const getPasswordRecoveryRedirectUri = (): string => {
-  return `${getRedirectUri()}?flow=password-recovery`;
-};
+export type EmailOtpLinkType = "signup" | "recovery" | "email_change" | "email" | "magiclink";
+
+const EMAIL_OTP_LINK_TYPES: readonly EmailOtpLinkType[] = [
+  "signup",
+  "recovery",
+  "email_change",
+  "email",
+  "magiclink",
+];
+
+export const isEmailOtpLinkType = (value: unknown): value is EmailOtpLinkType =>
+  typeof value === "string" && (EMAIL_OTP_LINK_TYPES as readonly string[]).includes(value);
 
 /**
  * コールバックURLからトークンを抽出

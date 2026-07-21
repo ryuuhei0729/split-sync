@@ -8,16 +8,22 @@ import * as Font from "expo-font";
 import { ChakraPetch_700Bold } from "@expo-google-fonts/chakra-petch";
 import { AuthProvider, useAuth } from "../contexts/AuthProvider";
 import { supabase } from "../lib/supabase";
-import { extractTokensFromUrl } from "../lib/google-auth";
+import { extractTokensFromUrl, isEmailOtpLinkType } from "../lib/google-auth";
 import { setPasswordRecoveryPending, usePasswordRecoveryPending } from "../lib/passwordRecovery";
 import { colors } from "../lib/theme";
 
 /**
- * Completes auth deep links (email confirmation / password reset). The
- * confirmation link opens `swimhubtimer://auth/callback?code=…` (PKCE); we
- * exchange the code for a session so onAuthStateChange logs the user in. Falls
- * back to fragment tokens (implicit flow, the default flowType here). Without
- * this the link opened the web LP and the sign-up happy path dead-ended.
+ * Completes auth deep links (email confirmation / password reset).
+ *
+ * Supabase's email templates now emit `swimhubtimer://auth/callback?token_hash=…&type=…`
+ * (project-wide setting) — this is checked first and verified via verifyOtp,
+ * which works for both signup confirmation and password recovery. `type`
+ * itself tells us the flow, so no extra query marker is needed on redirectTo.
+ *
+ * Older links may still arrive as `?code=…` (PKCE, kept here for backward
+ * compatibility / OAuth-style flows) or as fragment tokens (implicit flow).
+ * Without handling these the link opened the web LP and the sign-up happy
+ * path dead-ended.
  *
  * Password recovery links use the same callback URL, so we flag them via
  * setPasswordRecoveryPending *before* establishing the session — AuthGate
@@ -37,13 +43,37 @@ async function completeAuthDeepLink(url: string | null): Promise<void> {
     // (google-auth builds URLSearchParams from the hash by hand for the same
     // reason), so parse queryParams the RN-safe way.
     const queryParams = Linking.parse(url).queryParams;
+
+    const typeParam = queryParams?.type;
+    const emailOtpType = isEmailOtpLinkType(typeParam) ? typeParam : null;
+
+    // 新形式: Supabase メールテンプレートの token_hash + type。code / fragment
+    // token より先にチェックし、両方揃う場合は token_hash を優先する。
+    const tokenHashParam = queryParams?.token_hash;
+    const tokenHash = typeof tokenHashParam === "string" ? tokenHashParam : null;
+
+    if (tokenHash && emailOtpType) {
+      if (emailOtpType === "recovery") {
+        setPasswordRecoveryPending(true);
+        flaggedRecoveryInThisCall = true;
+      }
+      const { error } = await supabase.auth.verifyOtp({
+        type: emailOtpType,
+        token_hash: tokenHash,
+      });
+      if (error && flaggedRecoveryInThisCall) {
+        setPasswordRecoveryPending(false);
+      }
+      return;
+    }
+
     const codeParam = queryParams?.code;
     const code = typeof codeParam === "string" ? codeParam : null;
 
-    // getPasswordRecoveryRedirectUri() appends this marker so we can tell a
-    // recovery link apart from a normal sign-in/confirmation link — the code
-    // exchange itself doesn't expose that distinction via public types.
-    const isRecoveryLink = queryParams?.flow === "password-recovery";
+    // type=recovery クエリでパスワードリセットリンクを判別する
+    // (旧 flow=password-recovery マーカーから置き換え。redirectTo はクエリなしで
+    // 統一したためマーカーは付与されなくなった)
+    const isRecoveryLink = emailOtpType === "recovery";
 
     if (code) {
       if (isRecoveryLink) {

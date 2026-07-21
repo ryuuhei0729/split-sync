@@ -5,7 +5,7 @@ module.exports = () => {
   return {
     name: "SH Timer",
     slug: "swimhub-timer",
-    version: isAndroid ? ANDROID_VERSION : "2.4.0",
+    version: isAndroid ? ANDROID_VERSION : "2.5.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     scheme: "swimhubtimer",
