@@ -181,4 +181,36 @@ describe("RootLayout — completeAuthDeepLink token_hash 分岐", () => {
     expect(mockVerifyOtp).not.toHaveBeenCalled();
     expect(mockExchangeCodeForSession).not.toHaveBeenCalled();
   });
+
+  // PM 依頼4-2 (C-5 二重処理ガードの穴埋め): claimOAuthCode により、同一 code を含む
+  // URL が Linking 経由で2回連続 (Android Custom Tabs の新規 Intent 再配送や、
+  // getInitialURL → addEventListener の重複発火を想定) 届いても
+  // exchangeCodeForSession は1回しか呼ばれないことを固定する。2回目は
+  // claimOAuthCode が false を返すため completeAuthDeepLink は早期 return し、
+  // (このテストでは検証しないが) Alert も一切呼ばれない設計になっている。
+  it("PM依頼4-2: 同一 code を含む URL を2回連続で流しても exchangeCodeForSession は1回だけ呼ばれる", async () => {
+    const url = "swimhubtimer://auth/callback?code=dup-guard-code-001";
+    setInitialUrl(url);
+    render(<RootLayout />);
+
+    await waitFor(() => {
+      expect(mockExchangeCodeForSession).toHaveBeenCalledTimes(1);
+    });
+    expect(mockExchangeCodeForSession).toHaveBeenCalledWith("dup-guard-code-001");
+
+    // 2回目の到着 (Linking の 'url' イベント経由。既に claim 済みの同一 code)。
+    const listenerCalls = (Linking.addEventListener as jest.Mock).mock.calls as [
+      string,
+      (e: { url: string }) => void,
+    ][];
+    const urlHandler = listenerCalls.find(([eventName]) => eventName === "url")?.[1];
+    expect(urlHandler).toBeDefined();
+
+    mockExchangeCodeForSession.mockClear();
+    await urlHandler!({ url });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // 2回目は claimOAuthCode が false を返すため、再交換もエラー表示も発生しない
+    expect(mockExchangeCodeForSession).not.toHaveBeenCalled();
+  });
 });

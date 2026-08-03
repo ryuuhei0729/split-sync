@@ -1,0 +1,4 @@
+• Added a password reset feature
+• Improved video export
+• Refined the account and editor screens
+• Improved stability and fixed minor issues
