@@ -76,7 +76,7 @@
     "production": {
       "ios": {
         "ascAppId": "6759323295",
-        "ascApiKeyPath": "/Users/ryuuhei_0729/SwimHub/AuthKey_Y9S6G7KW9V.p8",
+        "ascApiKeyPath": "${ASC_KEY_PATH:-/Users/ryuuhei_0729/SwimHub/AuthKey_Y9S6G7KW9V.p8}",
         "ascApiKeyId": "Y9S6G7KW9V",
         "ascApiKeyIssuerId": "6a00eab9-1ee2-474d-82a1-6ec27420ef53"
       },

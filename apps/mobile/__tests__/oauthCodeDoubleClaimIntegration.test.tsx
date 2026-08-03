@@ -214,4 +214,48 @@ describe("PM依頼4-4: _layout.tsx と useGoogleAuth の同一 code 競合 (実�
     expect(mockExchangeCodeForSession).toHaveBeenCalledTimes(1);
     expect(mockExchangeCodeForSession).toHaveBeenCalledWith(code);
   });
+
+  // CodeRabbit 指摘 (PR #23): claimOAuthCode に負けた側は、勝った側の実際の
+  // 交換結果を知らずに無条件で success:true を返していた。勝った側 (_layout.tsx)
+  // の交換が実際には失敗するケースを再現し、負けた側 (useGoogleAuth) がその
+  // 失敗を正しく引き継ぐことを固定する。
+  it("_layout.tsx が先に code を claim し、その交換が実際には失敗すると、後から届いた useGoogleAuth 側も success:true を返さない", async () => {
+    const code = "integration-layout-wins-then-fails-003";
+    const callbackUrl = `swimhubtimer://auth/callback?code=${code}`;
+
+    render(<RootLayout />);
+    await waitFor(() => {
+      expect(Linking.addEventListener).toHaveBeenCalled();
+    });
+
+    // _layout.tsx 側の交換を意図的に失敗させる (期限切れ/再利用された code 等を想定)。
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: null,
+      error: { message: "invalid_grant" },
+    });
+
+    // 1. _layout.tsx がグローバル Linking ハンドラ経由でこの code を先に claim し、
+    //    交換を試みて失敗する。
+    await act(async () => {
+      fireUrl(callbackUrl);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(mockExchangeCodeForSession).toHaveBeenCalledTimes(1);
+
+    // 2. 直後に useGoogleAuth 側にも同じ code が届くが、既に claim 済みなので
+    //    自分では交換せず、_layout.tsx 側の実際の (失敗という) 結果を引き継ぐ。
+    mockOpenAuthSessionAsync.mockResolvedValue({ type: "success", url: callbackUrl });
+    const { result } = await renderHook(() => useGoogleAuth());
+
+    let authResult: { success: boolean; error?: Error | null } | undefined;
+    await act(async () => {
+      authResult = await result.current.signInWithGoogle();
+    });
+
+    // useGoogleAuth 自身は交換をやり直さない (claim 済みのため) が、
+    // success:true を誤って返してもいけない。
+    expect(mockExchangeCodeForSession).toHaveBeenCalledTimes(1);
+    expect(authResult?.success).toBe(false);
+  });
 });

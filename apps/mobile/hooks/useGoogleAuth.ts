@@ -76,23 +76,40 @@ export const useGoogleAuth = (): UseGoogleAuthReturn => {
         //
         // 同一 code は app/_layout.tsx のグローバル Linking ハンドラにも届きうる
         // (Android で Custom Tabs 復帰が新規 Intent になった場合)。claimOAuthCode
-        // で先に処理を claim できた場合のみ交換する。既に他方が処理済みなら
-        // ログインは成立しているはずなのでエラーを出さず成功扱いで終える。
+        // で先に処理を claim できた場合のみ交換する。既に他方が処理済みの場合は、
+        // 無条件で成功扱いにはせず、他方の実際の交換結果 (claim.result) を待って
+        // 同期する — 他方が実は失敗していたのに、ここだけ success:true を返すと
+        // 呼び出し側が誤ってログイン成立と判断してしまう (CodeRabbit 指摘)。
         if (tokens.code) {
-          if (!claimOAuthCode(tokens.code)) {
+          const claim = claimOAuthCode(tokens.code);
+
+          if (!claim.claimed) {
+            const otherResult = await claim.result;
+            if (!otherResult.success) {
+              const msg = t("auth.errors.oauthError");
+              setError(msg);
+              return { success: false, error: new Error(msg) };
+            }
             return { success: true };
           }
 
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
-            tokens.code,
-          );
+          try {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+              tokens.code,
+            );
 
-          if (exchangeError) {
-            setError(localizeAuthError(exchangeError.message, t));
-            return { success: false, error: exchangeError };
+            if (exchangeError) {
+              claim.resolve({ success: false });
+              setError(localizeAuthError(exchangeError.message, t));
+              return { success: false, error: exchangeError };
+            }
+
+            claim.resolve({ success: true });
+            return { success: true };
+          } catch (exchangeException) {
+            claim.resolve({ success: false });
+            throw exchangeException;
           }
-
-          return { success: true };
         }
 
         // フォールバック: implicit flow (#access_token=...) で返ってきた場合

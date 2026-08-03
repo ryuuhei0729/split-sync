@@ -76,7 +76,7 @@ export default function NotFound() {
               <div className="mr-2 flex h-10 w-10 items-center justify-center">
                 <Image
                   src="/icon.png"
-                  alt="SwimHub Timer"
+                  alt=""
                   width={40}
                   height={40}
                   className="h-full w-full object-contain"

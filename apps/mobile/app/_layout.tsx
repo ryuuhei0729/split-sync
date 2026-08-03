@@ -106,33 +106,43 @@ async function completeAuthDeepLink(url: string | null): Promise<void> {
     // 交換する」を保証し、後から来た側は既に成功している前提でエラーを
     // 出さず何もしない (claim/交換の間に await を挟まないこと)。
     if (code) {
-      if (!claimOAuthCode(code)) {
-        // useGoogleAuth 側が既にこの code を処理済み。ログインは既に
-        // 成立しているはずなので、ここでは何もせずエラーも出さない。
+      const claim = claimOAuthCode(code);
+      if (!claim.claimed) {
+        // useGoogleAuth 側が既にこの code を claim 済み。ここでは実際の交換結果を
+        // 通知する義務は無い (成功時は何もしない設計のまま。失敗時は useGoogleAuth
+        // 側が claim.result を見て自前でエラー表示するため、二重通知は避ける)。
         return;
       }
       if (isRecoveryLink) {
         setPasswordRecoveryPending(true);
         flaggedRecoveryInThisCall = true;
       }
-      // exchangeCodeForSession doesn't throw for an expired/reused code — it
-      // resolves with `error` set — so we must check it explicitly, not just catch.
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (error) {
-        if (flaggedRecoveryInThisCall) {
-          setPasswordRecoveryPending(false);
+      try {
+        // exchangeCodeForSession doesn't throw for an expired/reused code — it
+        // resolves with `error` set — so we must check it explicitly, not just catch.
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          claim.resolve({ success: false });
+          if (flaggedRecoveryInThisCall) {
+            setPasswordRecoveryPending(false);
+          }
+          // この分岐は claimOAuthCode に勝った (= 実際にこの code を交換しようとした)
+          // 側でのみ到達する。PKCE 化により、この安全網経路が Google サインインの
+          // 主経路として実際に発火するようになったため、失敗時に無言のままだと
+          // ユーザーがログイン画面に戻されただけで原因が分からず再試行するしかない
+          // (Reviewer Warning)。claim に負けた側 (上の `if (!claim.claimed)`)
+          // は正常系なのでここには来ない — エラー表示するのは実際に交換を試みて
+          // 失敗した場合のみ。
+          // i18next の `t` は内部で `this` (this.translator) に依存するため、
+          // 素の関数参照 (`i18n.t`) をそのまま渡すと `this` が失われて壊れる。
+          // `.bind(i18n)` で常に `i18n` を receiver にして呼び出す。
+          Alert.alert(i18n.t("common.error"), localizeAuthError(error.message, i18n.t.bind(i18n)));
+          return;
         }
-        // この分岐は claimOAuthCode に勝った (= 実際にこの code を交換しようとした)
-        // 側でのみ到達する。PKCE 化により、この安全網経路が Google サインインの
-        // 主経路として実際に発火するようになったため、失敗時に無言のままだと
-        // ユーザーがログイン画面に戻されただけで原因が分からず再試行するしかない
-        // (Reviewer Warning)。claim に負けた側 (上の `if (!claimOAuthCode(code))`)
-        // は正常系なのでここには来ない — エラー表示するのは実際に交換を試みて
-        // 失敗した場合のみ。
-        // i18next の `t` は内部で `this` (this.translator) に依存するため、
-        // 素の関数参照 (`i18n.t`) をそのまま渡すと `this` が失われて壊れる。
-        // `.bind(i18n)` で常に `i18n` を receiver にして呼び出す。
-        Alert.alert(i18n.t("common.error"), localizeAuthError(error.message, i18n.t.bind(i18n)));
+        claim.resolve({ success: true });
+      } catch (exchangeException) {
+        claim.resolve({ success: false });
+        throw exchangeException;
       }
       return;
     }

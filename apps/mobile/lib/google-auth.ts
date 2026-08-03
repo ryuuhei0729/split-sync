@@ -41,25 +41,57 @@ export const isEmailOtpLinkType = (value: unknown): value is EmailOtpLinkType =>
  * なのでエラーを出さず何もしないこと。JS はシングルスレッドなので、この判定を
  * `await` を挟まず同期的に行えば競合しない。
  *
+ * 負けた側は、勝った側の実際の交換結果 (成功/失敗) を `result` で待てる。
+ * これが無いと、勝った側の exchangeCodeForSession が実際には失敗したのに
+ * 負けた側が無条件で success 扱いを返してしまう (CodeRabbit 指摘)。
+ * 勝った側は交換結果が確定し次第、必ず `resolve` を呼ぶこと (例外時も `finally` 等で
+ * 呼び、`result` を待つ負けた側が永久に解決しないままにならないようにする)。
+ *
  * 保持するコードは直近 `MAX_TRACKED_CODES` 件のみ (無限にメモリを食わない)。
  */
 const MAX_TRACKED_CODES = 5;
-const claimedOAuthCodes: string[] = [];
+
+export interface OAuthCodeExchangeResult {
+  success: boolean;
+}
+
+interface OAuthCodeClaim {
+  resolve: (result: OAuthCodeExchangeResult) => void;
+  result: Promise<OAuthCodeExchangeResult>;
+}
+
+export type ClaimOAuthCodeOutcome =
+  | { claimed: true; resolve: (result: OAuthCodeExchangeResult) => void }
+  | { claimed: false; result: Promise<OAuthCodeExchangeResult> };
+
+const claimedOAuthCodes = new Map<string, OAuthCodeClaim>();
+const claimedOAuthCodeOrder: string[] = [];
 
 /**
- * 同一 code を最初に処理しようとした呼び出し側だけが `true` を得る。
- * 2回目以降の呼び出しは `false` を返すので、呼び出し側はエラー表示せず
- * 単に何もしないこと (元のバグ=偽エラー表示 の再発防止)。
+ * 同一 code を最初に処理しようとした呼び出し側だけ `claimed: true` を得て、
+ * 交換結果が確定したら `resolve` を呼ぶ責任を負う。2回目以降の呼び出しは
+ * `claimed: false` となり、`result` を await すれば勝った側の実際の結果
+ * (成功/失敗) を取得できる — エラー表示するかどうかは呼び出し側が判断すること。
  *
  * 必ず `await` の前 (同期的な位置) で呼び出すこと。
  */
-export const claimOAuthCode = (code: string): boolean => {
-  if (claimedOAuthCodes.includes(code)) return false;
-  claimedOAuthCodes.push(code);
-  if (claimedOAuthCodes.length > MAX_TRACKED_CODES) {
-    claimedOAuthCodes.shift();
+export const claimOAuthCode = (code: string): ClaimOAuthCodeOutcome => {
+  const existing = claimedOAuthCodes.get(code);
+  if (existing) {
+    return { claimed: false, result: existing.result };
   }
-  return true;
+
+  let resolve!: (result: OAuthCodeExchangeResult) => void;
+  const result = new Promise<OAuthCodeExchangeResult>((res) => {
+    resolve = res;
+  });
+  claimedOAuthCodes.set(code, { resolve, result });
+  claimedOAuthCodeOrder.push(code);
+  if (claimedOAuthCodeOrder.length > MAX_TRACKED_CODES) {
+    const oldest = claimedOAuthCodeOrder.shift();
+    if (oldest !== undefined) claimedOAuthCodes.delete(oldest);
+  }
+  return { claimed: true, resolve };
 };
 
 /**
