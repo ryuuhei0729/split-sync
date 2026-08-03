@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import * as WebBrowser from "expo-web-browser";
 import { useTranslation } from "react-i18next";
-import { getRedirectUri, extractTokensFromUrl } from "../lib/google-auth";
+import { getRedirectUri, extractTokensFromUrl, claimOAuthCode } from "../lib/google-auth";
 import { supabase } from "../lib/supabase";
 import { localizeAuthError } from "../utils/authErrorLocalizer";
 
@@ -68,6 +68,34 @@ export const useGoogleAuth = (): UseGoogleAuthReturn => {
           return { success: false, error: new Error(tokens.error) };
         }
 
+        // Supabase クライアントは flowType: "pkce" で構成されているため、
+        // コールバックは通常クエリパラメータ `?code=...` で返る。
+        // まずこちらを優先して exchangeCodeForSession でセッションを確立する。
+        // code_verifier が端末ストレージから読めなかった/既に消費済みの場合も
+        // exchangeCodeForSession は例外を投げず error を返すため、ここで捕捉できる。
+        //
+        // 同一 code は app/_layout.tsx のグローバル Linking ハンドラにも届きうる
+        // (Android で Custom Tabs 復帰が新規 Intent になった場合)。claimOAuthCode
+        // で先に処理を claim できた場合のみ交換する。既に他方が処理済みなら
+        // ログインは成立しているはずなのでエラーを出さず成功扱いで終える。
+        if (tokens.code) {
+          if (!claimOAuthCode(tokens.code)) {
+            return { success: true };
+          }
+
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+            tokens.code,
+          );
+
+          if (exchangeError) {
+            setError(localizeAuthError(exchangeError.message, t));
+            return { success: false, error: exchangeError };
+          }
+
+          return { success: true };
+        }
+
+        // フォールバック: implicit flow (#access_token=...) で返ってきた場合
         if (tokens.accessToken && tokens.refreshToken) {
           const { error: sessionError } = await supabase.auth.setSession({
             access_token: tokens.accessToken,
