@@ -704,7 +704,7 @@ Deno.test("4-3: 一部プレフィックスのみ list 失敗した場合でも�
     onList: (url) => {
       const prefix = url.searchParams.get("prefix");
       if (prefix === failingPrefix) {
-        return new Response("server error", { status: 500 === 500 ? 404 : 404 });
+        return new Response("server error", { status: 404 });
       }
       if (prefix === okPrefix) {
         return new Response(buildListXml(["profile-images/userA/ok.jpg"]), { status: 200 });
@@ -757,6 +757,32 @@ Deno.test("5-1: R2認証情報はあるが R2_BUCKET_NAME が未設定のとき�
     assert(
       body.errors.some((e: string) => e.includes("R2_BUCKET_NAME")),
       `errors に R2_BUCKET_NAME への言及が無い: ${JSON.stringify(body.errors)}`,
+    );
+    assertEquals(calls.length, 0, "設定不備は list/delete 呼び出し前に検出されること");
+  } finally {
+    restore();
+    restoreEnv();
+  }
+});
+
+Deno.test("5-1b: R2認証情報が3つ中1つだけ欠落しているとき、Storageフォールバックに倒れず明示的にエラー (success:false, 500) になり、一切 fetch されない", async () => {
+  const restoreEnv = withEnv({
+    ...BASE_ENV,
+    R2_ACCESS_KEY_ID: undefined,
+    R2_VIDEO_BUCKET_NAME: undefined,
+  });
+  const { calls, restore } = installFetchMock({});
+
+  try {
+    const handler = createDeleteUserStorageHandler();
+    const res = await handler(deleteRequest("userA"));
+    const body = await res.json();
+
+    assertEquals(res.status, 500);
+    assertEquals(body.success, false);
+    assert(
+      body.errors.some((e: string) => e.includes("R2_ACCESS_KEY_ID")),
+      `errors に R2_ACCESS_KEY_ID への言及が無い: ${JSON.stringify(body.errors)}`,
     );
     assertEquals(calls.length, 0, "設定不備は list/delete 呼び出し前に検出されること");
   } finally {

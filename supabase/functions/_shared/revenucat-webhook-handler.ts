@@ -228,6 +228,14 @@ export function createRevenueCatWebhookHandler(appName: string) {
         );
       }
 
+      // event.environment はランタイムで検証されていない未知の値も届き得る。ここを
+      // 通さずに mapEventToUpdate() へ渡すと、欠落・未知値がすべて "production" として
+      // 記録され、監査・失効判断に使う provider_environment が汚染される。
+      if (event.environment !== "PRODUCTION" && event.environment !== "SANDBOX") {
+        console.error(`[${appName}] Invalid or missing event.environment:`, event.environment);
+        return jsonResponse({ error: "Invalid or missing event.environment" }, 400);
+      }
+
       const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
       // Idempotency check: at-most-once processing using transaction_id

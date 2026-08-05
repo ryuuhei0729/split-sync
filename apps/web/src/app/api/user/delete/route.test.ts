@@ -21,10 +21,17 @@ vi.mock("@/lib/api-helpers", () => ({
   verifyAuth: (...args: unknown[]) => verifyAuthMock(...args),
 }));
 
+const stripeSubscriptionsListMock = vi.fn();
+const stripeSubscriptionsCancelMock = vi.fn();
+const stripeCustomersDelMock = vi.fn();
+
 vi.mock("@/lib/stripe", () => ({
   getStripe: vi.fn(() => ({
-    subscriptions: { list: vi.fn(), cancel: vi.fn() },
-    customers: { del: vi.fn() },
+    subscriptions: {
+      list: (...args: unknown[]) => stripeSubscriptionsListMock(...args),
+      cancel: (...args: unknown[]) => stripeSubscriptionsCancelMock(...args),
+    },
+    customers: { del: (...args: unknown[]) => stripeCustomersDelMock(...args) },
   })),
 }));
 
@@ -69,6 +76,9 @@ describe("DELETE /api/user/delete (timer) - ストレージ削除失敗時のフ
     subscriptionSelectMock.mockReset().mockResolvedValue({ data: { stripe_customer_id: null } });
     functionsInvokeMock.mockReset();
     deleteUserMock.mockReset().mockResolvedValue({ error: null });
+    stripeSubscriptionsListMock.mockReset().mockResolvedValue({ data: [] });
+    stripeSubscriptionsCancelMock.mockReset().mockResolvedValue({});
+    stripeCustomersDelMock.mockReset().mockResolvedValue({});
     verifyAuthMock.mockResolvedValue({ result: { uid: VALID_UID, email: "a@example.com" } });
   });
 
@@ -87,6 +97,20 @@ describe("DELETE /api/user/delete (timer) - ストレージ削除失敗時のフ
     const response = await promise;
 
     expect(response.status).toBe(500);
+    expect(functionsInvokeMock).toHaveBeenCalledTimes(3);
+    expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  it("Stripe顧客ありでStripe解約に成功しても、ストレージ削除が失敗すれば deleteUser は呼ばれない", async () => {
+    subscriptionSelectMock.mockResolvedValue({ data: { stripe_customer_id: "cus_test_123" } });
+    functionsInvokeMock.mockResolvedValue({ data: null, error: { message: "edge function down" } });
+
+    const promise = DELETE(makeAuthedRequest());
+    await vi.runAllTimersAsync();
+    const response = await promise;
+
+    expect(response.status).toBe(500);
+    expect(stripeCustomersDelMock).toHaveBeenCalledWith("cus_test_123");
     expect(functionsInvokeMock).toHaveBeenCalledTimes(3);
     expect(deleteUserMock).not.toHaveBeenCalled();
   });

@@ -147,6 +147,11 @@ function parseListObjectsV2Xml(xml: string): {
   return { keys, isTruncated, nextContinuationToken };
 }
 
+// R2 への単一リクエストのタイムアウト。呼び出し元 (apps/web の delete route) が
+// 最大3回リトライするため、タイムアウトが無いと1回の接続滞留が退会処理全体を
+// 3倍の時間ブロックし得る。stalled connection を検知して打ち切るための保守的な値。
+const R2_FETCH_TIMEOUT_MS = 30_000;
+
 /**
  * 指定バケット・プレフィックス配下のオブジェクトキーを全件取得する (ページネーション対応)。
  * ListObjectsV2 は1回の応答で最大1000件までしか返さないため、IsTruncated=true の間
@@ -171,7 +176,10 @@ async function listAllR2Keys(
       url.searchParams.set("continuation-token", continuationToken);
     }
 
-    const res = await aws.fetch(url.toString(), { method: "GET" });
+    const res = await aws.fetch(url.toString(), {
+      method: "GET",
+      signal: AbortSignal.timeout(R2_FETCH_TIMEOUT_MS),
+    });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`R2 ListObjectsV2 failed (${bucket}): ${res.status} ${body.slice(0, 200)}`);
@@ -214,6 +222,7 @@ async function deleteR2Keys(
       try {
         const res = await aws.fetch(`${endpoint}/${bucket}/${encodeR2Key(key)}`, {
           method: "DELETE",
+          signal: AbortSignal.timeout(R2_FETCH_TIMEOUT_MS),
         });
         if (!res.ok) failedKeys.push(key);
       } catch {
@@ -243,14 +252,32 @@ type R2ConfigResult =
   | { status: "ok"; config: R2Config };
 
 function getR2Config(): R2ConfigResult {
-  const accountId = Deno.env.get("R2_ACCOUNT_ID");
-  const accessKeyId = Deno.env.get("R2_ACCESS_KEY_ID");
-  const secretAccessKey = Deno.env.get("R2_SECRET_ACCESS_KEY");
+  const r2Credentials = {
+    R2_ACCOUNT_ID: Deno.env.get("R2_ACCOUNT_ID"),
+    R2_ACCESS_KEY_ID: Deno.env.get("R2_ACCESS_KEY_ID"),
+    R2_SECRET_ACCESS_KEY: Deno.env.get("R2_SECRET_ACCESS_KEY"),
+  };
+  const missingCredentials = Object.entries(r2Credentials)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
 
   // 認証情報が一つも無ければ「R2 未使用環境」と判断し、Storage フォールバックに委ねる。
-  if (!accountId || !accessKeyId || !secretAccessKey) {
+  if (missingCredentials.length === Object.keys(r2Credentials).length) {
     return { status: "not-configured" };
   }
+
+  // 一部だけ設定されている場合はキーのローテーション漏れ・タイポによる「R2 使用環境の
+  // 設定不備」であり、下のバケット名チェックと同じ理由 (サイレント成功で孤児オブジェクトが
+  // 残る) でフォールバックに倒さず必ずエラーとして表面化させる。
+  if (missingCredentials.length > 0) {
+    return {
+      status: "misconfigured",
+      reason: `R2 credentials are partially configured. Missing: ${missingCredentials.join(", ")}. Aborting instead of silently falling back to Supabase Storage.`,
+    };
+  }
+
+  const { R2_ACCOUNT_ID: accountId, R2_ACCESS_KEY_ID: accessKeyId, R2_SECRET_ACCESS_KEY: secretAccessKey } =
+    r2Credentials as Record<string, string>;
 
   // 画像バケット名は apps/web/lib/r2.ts の getImageBucketName() と同じ規約でデフォルト値を
   // 持たず必須とする (同ファイルも未設定時は例外を投げている)。ここで `?? null` 等の
