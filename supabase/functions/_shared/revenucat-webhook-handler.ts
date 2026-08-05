@@ -133,6 +133,9 @@ function mapEventToUpdate(event: RevenueCatEvent): Record<string, unknown> | nul
   const base = {
     provider: "revenucat",
     provider_subscription_id: event.original_transaction_id,
+    // サンドボックス由来でも Premium 付与ロジックは変えない(App Store 審査員の購入は
+    // SANDBOX として届くため)。ただし監査・失効判断のため取引環境は常に記録する。
+    provider_environment: event.environment === "SANDBOX" ? "sandbox" : "production",
     premium_expires_at: msToISO(event.expiration_at_ms),
     current_period_start: msToISO(event.purchased_at_ms),
     updated_at: new Date().toISOString(),
@@ -223,6 +226,14 @@ export function createRevenueCatWebhookHandler(appName: string) {
           { error: "app_user_id is anonymous. Ensure Purchases.logIn(supabaseUserId) is called." },
           400,
         );
+      }
+
+      // event.environment はランタイムで検証されていない未知の値も届き得る。ここを
+      // 通さずに mapEventToUpdate() へ渡すと、欠落・未知値がすべて "production" として
+      // 記録され、監査・失効判断に使う provider_environment が汚染される。
+      if (event.environment !== "PRODUCTION" && event.environment !== "SANDBOX") {
+        console.error(`[${appName}] Invalid or missing event.environment:`, event.environment);
+        return jsonResponse({ error: "Invalid or missing event.environment" }, 400);
       }
 
       const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);

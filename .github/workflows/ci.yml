@@ -65,3 +65,37 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+  test-edge-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # pnpm-workspace.yaml を検出した Deno は npm 互換モードで @types/node を
+      # node_modules から解決しようとするため、事前に依存関係をインストールしておく必要がある。
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ローカル検証で使用したバージョンとCIで揃えることで、
+      # 「ローカルでは通るがCIでは挙動が違う」ドリフトを防ぐ。
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.9.4"
+
+      # swim-hub / swimhub-scanner と同じ Supabase プロジェクトを共有しており、
+      # supabase/functions/_shared/ 配下の本体コード (delete-user-storage-handler.ts 等) は
+      # 3リポジトリでバイト単位同一に保つ運用のため、このテストが無いとドリフトを
+      # 検知できない (swim-hub/.github/workflows/supabase.yml と同じ規約)。
+      # `supabase functions test` は CLI から廃止されたため Deno で直接テストを実行する。
+      # 実テストファイル（*.test.ts / *_test.ts）が存在する場合のみ実行する。
+      - name: Test Edge Functions
+        if: ${{ hashFiles('supabase/functions/**/*.test.ts', 'supabase/functions/**/*_test.ts') != '' }}
+        run: deno test --allow-env --allow-net supabase/functions/
