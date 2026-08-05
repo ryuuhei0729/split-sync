@@ -24,3 +24,8 @@ verify_jwt = false
 
 [functions.revenucat-webhook]
 verify_jwt = false
+
+# アカウント退会時のストレージ削除も service_role 専用の内部呼び出しであり、
+# ハンドラ内で SUPABASE_SERVICE_ROLE_KEY との完全一致チェックを行うため JWT 検証を無効化する。
+[functions.delete-user-storage]
+verify_jwt = false

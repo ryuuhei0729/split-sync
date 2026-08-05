@@ -133,6 +133,9 @@ function mapEventToUpdate(event: RevenueCatEvent): Record<string, unknown> | nul
   const base = {
     provider: "revenucat",
     provider_subscription_id: event.original_transaction_id,
+    // サンドボックス由来でも Premium 付与ロジックは変えない(App Store 審査員の購入は
+    // SANDBOX として届くため)。ただし監査・失効判断のため取引環境は常に記録する。
+    provider_environment: event.environment === "SANDBOX" ? "sandbox" : "production",
     premium_expires_at: msToISO(event.expiration_at_ms),
     current_period_start: msToISO(event.purchased_at_ms),
     updated_at: new Date().toISOString(),

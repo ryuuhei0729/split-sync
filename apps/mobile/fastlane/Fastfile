@@ -1,8 +1,8 @@
 default_platform(:ios)
 
-# App Store Connect API キー (SwimHub ルートの AuthKey_Y9S6G7KW9V.p8 / git 管理外)
+# App Store Connect API キー (~/.appstoreconnect/ に mode 600 で配置。リポジトリツリー外)
 ASC_KEY_ID    = ENV["ASC_KEY_ID"]    || "Y9S6G7KW9V"
-ASC_KEY_PATH  = ENV["ASC_KEY_PATH"]  || "/Users/ryuuhei_0729/SwimHub/AuthKey_Y9S6G7KW9V.p8"
+ASC_KEY_PATH  = ENV["ASC_KEY_PATH"]  || File.expand_path("~/.appstoreconnect/AuthKey_Y9S6G7KW9V.p8")
 ASC_ISSUER_ID = ENV["ASC_ISSUER_ID"] || "6a00eab9-1ee2-474d-82a1-6ec27420ef53"
 
 # 2026-07 に追加した新ロケール。既存 (ja) には触れない
