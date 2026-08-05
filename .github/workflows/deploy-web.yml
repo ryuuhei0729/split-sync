@@ -22,6 +22,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          # @ryuuhei0729/swimhub-oauth は GitHub Packages 上の private パッケージで、
+          # 読み取りにも認証が必要 (.npmrc が ${NODE_AUTH_TOKEN} を参照している)。
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Build for Cloudflare
         working-directory: apps/web

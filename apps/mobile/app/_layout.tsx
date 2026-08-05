@@ -120,8 +120,15 @@ async function completeAuthDeepLink(url: string | null): Promise<void> {
       try {
         // exchangeCodeForSession doesn't throw for an expired/reused code — it
         // resolves with `error` set — so we must check it explicitly, not just catch.
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
+        // A null `error` alone isn't sufficient either: the warm path (useGoogleAuth
+        // → the shared package's signInWithGoogle) treats `error:null` with no
+        // `session` as a failure (`session_not_received`). Without mirroring that
+        // check here, the exact same expired/stale code could resolve as a failure
+        // via one path and a silent "success" via the other, depending on which
+        // side wins claimOAuthCode below — the same claim-race asymmetry this
+        // refactor exists to remove (PM-verified).
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error || !data.session) {
           claim.resolve({ success: false });
           if (flaggedRecoveryInThisCall) {
             setPasswordRecoveryPending(false);
@@ -136,7 +143,12 @@ async function completeAuthDeepLink(url: string | null): Promise<void> {
           // i18next の `t` は内部で `this` (this.translator) に依存するため、
           // 素の関数参照 (`i18n.t`) をそのまま渡すと `this` が失われて壊れる。
           // `.bind(i18n)` で常に `i18n` を receiver にして呼び出す。
-          Alert.alert(i18n.t("common.error"), localizeAuthError(error.message, i18n.t.bind(i18n)));
+          Alert.alert(
+            i18n.t("common.error"),
+            error
+              ? localizeAuthError(error.message, i18n.t.bind(i18n))
+              : i18n.t("auth.errors.sessionNotFound"),
+          );
           return;
         }
         claim.resolve({ success: true });

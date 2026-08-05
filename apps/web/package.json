@@ -18,6 +18,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@opennextjs/cloudflare": "^1.17.0",
+    "@ryuuhei0729/swimhub-oauth": "~0.1.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "@swimhub-timer/i18n": "*",
