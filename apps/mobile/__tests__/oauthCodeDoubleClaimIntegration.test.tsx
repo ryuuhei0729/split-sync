@@ -120,7 +120,13 @@ const fireUrl = (Linking as unknown as { __fireUrl: (url: string) => void }).__f
 beforeEach(() => {
   jest.clearAllMocks();
   setInitialUrl(null);
-  mockExchangeCodeForSession.mockResolvedValue({ data: {}, error: null });
+  // session を持たせる: 共有パッケージ (@ryuuhei0729/swimhub-oauth) は
+  // exchangeCodeForSession がエラー無しで session を返さないケースを失敗として扱う
+  // (旧 route.ts / 旧 hook はこのチェックを持たず「成功」扱いしていた潜在バグ)。
+  mockExchangeCodeForSession.mockResolvedValue({
+    data: { session: { access_token: "mock-access-token" } },
+    error: null,
+  });
   mockSignInWithOAuth.mockResolvedValue({
     data: { url: "https://accounts.google.com/o/oauth2/mock-auth" },
     error: null,

@@ -25,6 +25,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          # @ryuuhei0729/swimhub-oauth は GitHub Packages 上の private パッケージで、
+          # 読み取りにも認証が必要 (.npmrc が ${NODE_AUTH_TOKEN} を参照している)。
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Lint web
         run: pnpm lint:web
@@ -43,6 +47,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          # @ryuuhei0729/swimhub-oauth は GitHub Packages 上の private パッケージで、
+          # 読み取りにも認証が必要 (.npmrc が ${NODE_AUTH_TOKEN} を参照している)。
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Type check
         run: pnpm -r --if-present type-check
@@ -62,6 +70,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          # @ryuuhei0729/swimhub-oauth は GitHub Packages 上の private パッケージで、
+          # 読み取りにも認証が必要 (.npmrc が ${NODE_AUTH_TOKEN} を参照している)。
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Run tests
         run: pnpm test
@@ -82,6 +94,10 @@ jobs:
       # node_modules から解決しようとするため、事前に依存関係をインストールしておく必要がある。
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          # @ryuuhei0729/swimhub-oauth は GitHub Packages 上の private パッケージで、
+          # 読み取りにも認証が必要 (.npmrc が ${NODE_AUTH_TOKEN} を参照している)。
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       # ローカル検証で使用したバージョンとCIで揃えることで、
       # 「ローカルでは通るがCIでは挙動が違う」ドリフトを防ぐ。
