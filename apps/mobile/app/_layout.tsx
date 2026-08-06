@@ -284,7 +284,11 @@ export default function RootLayout() {
   // start URL (isColdStart=true, see completeAuthDeepLink's doc comment)
   // plus any received while the app is open (isColdStart defaults to false).
   useEffect(() => {
-    Linking.getInitialURL().then((url) => completeAuthDeepLink(url, true));
+    Linking.getInitialURL()
+      .then((url) => completeAuthDeepLink(url, true))
+      .catch(() => {
+        // 初期 URL の取得に失敗した場合は認証画面のまま再試行させる
+      });
     const sub = Linking.addEventListener("url", (e) => completeAuthDeepLink(e.url));
     return () => sub.remove();
   }, []);
