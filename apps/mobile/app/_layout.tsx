@@ -56,8 +56,16 @@ import { localizeAuthError } from "../utils/authErrorLocalizer";
  * hijack the user's *next*, unrelated normal sign-in and bounce them to
  * reset-password. Only cleared when *this* call set it, so an unrelated
  * confirmation-link failure never wipes out a real pending recovery.
+ *
+ * `isColdStart` (same convention as scanner's `_layout.tsx`) is `true` only
+ * when this call originated from `Linking.getInitialURL()` (app launched
+ * from a killed state). It gates the OAuth safety-net failure Alert below:
+ * on cold start the warm `useGoogleAuth` JS context never existed, so
+ * nothing has shown the user an error yet; on warm delivery (the
+ * `addEventListener("url", …)` path) that context is alive and already
+ * showed its own error, so alerting again here would double-notify.
  */
-async function completeAuthDeepLink(url: string | null): Promise<void> {
+async function completeAuthDeepLink(url: string | null, isColdStart = false): Promise<void> {
   if (!url || !supabase || !url.includes("auth/callback")) return;
   let flaggedRecoveryInThisCall = false;
   try {
@@ -134,21 +142,28 @@ async function completeAuthDeepLink(url: string | null): Promise<void> {
             setPasswordRecoveryPending(false);
           }
           // この分岐は claimOAuthCode に勝った (= 実際にこの code を交換しようとした)
-          // 側でのみ到達する。PKCE 化により、この安全網経路が Google サインインの
-          // 主経路として実際に発火するようになったため、失敗時に無言のままだと
-          // ユーザーがログイン画面に戻されただけで原因が分からず再試行するしかない
-          // (Reviewer Warning)。claim に負けた側 (上の `if (!claim.claimed)`)
+          // 側でのみ到達する。claim に負けた側 (上の `if (!claim.claimed)`)
           // は正常系なのでここには来ない — エラー表示するのは実際に交換を試みて
           // 失敗した場合のみ。
-          // i18next の `t` は内部で `this` (this.translator) に依存するため、
-          // 素の関数参照 (`i18n.t`) をそのまま渡すと `this` が失われて壊れる。
-          // `.bind(i18n)` で常に `i18n` を receiver にして呼び出す。
-          Alert.alert(
-            i18n.t("common.error"),
-            error
-              ? localizeAuthError(error.message, i18n.t.bind(i18n))
-              : i18n.t("auth.errors.sessionNotFound"),
-          );
+          // 通知するかどうかは isColdStart (getInitialURL 経由 = アプリ起動時に
+          // 呼ばれたか) で分岐する:
+          //   - cold start: ブラウザ表示中にアプリが kill されていた場合、warm
+          //     path (useGoogleAuth) の JS コンテキストごと失われている。無言で
+          //     失敗するとユーザーは理由も分からず取り残されるため通知する。
+          //   - warm (addEventListener 経由): useGoogleAuth の JS コンテキストが
+          //     生きており、warm path 側が既にエラー表示済みのはずなので通知しない
+          //     (通知すると二重表示になる。scanner と同じ方式、PM 判断)。
+          if (isColdStart) {
+            // i18next の `t` は内部で `this` (this.translator) に依存するため、
+            // 素の関数参照 (`i18n.t`) をそのまま渡すと `this` が失われて壊れる。
+            // `.bind(i18n)` で常に `i18n` を receiver にして呼び出す。
+            Alert.alert(
+              i18n.t("common.error"),
+              error
+                ? localizeAuthError(error.message, i18n.t.bind(i18n))
+                : i18n.t("auth.errors.sessionNotFound"),
+            );
+          }
           return;
         }
         claim.resolve({ success: true });
@@ -266,9 +281,10 @@ export default function RootLayout() {
   }, []);
 
   // Complete auth deep links (email confirmation / password reset): the cold-
-  // start URL plus any received while the app is open.
+  // start URL (isColdStart=true, see completeAuthDeepLink's doc comment)
+  // plus any received while the app is open (isColdStart defaults to false).
   useEffect(() => {
-    Linking.getInitialURL().then(completeAuthDeepLink);
+    Linking.getInitialURL().then((url) => completeAuthDeepLink(url, true));
     const sub = Linking.addEventListener("url", (e) => completeAuthDeepLink(e.url));
     return () => sub.remove();
   }, []);
