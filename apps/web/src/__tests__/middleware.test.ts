@@ -24,15 +24,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
 // updateSession をモック。
-// 実際の updateSession は内部で `NextResponse.next({ request })` を呼び、request
-// ヘッダーをそのまま x-middleware-override-headers 経由でレンダリングに引き渡す。
-// x-nonce 伝播 (attachNonceRequestHeaderOverride) の検証にはこの挙動の再現が必須。
+// 実際の updateSession は第 2 引数の追加ヘッダーを request ヘッダーに重ねて
+// `NextResponse.next({ request: { headers } })` を呼び、x-middleware-override-headers
+// 経由でレンダリングに引き渡す。nonce 伝播の検証にはこの挙動の再現が必須。
 vi.mock("@/lib/supabase/middleware", () => ({
-  updateSession: vi.fn().mockImplementation((req: NextRequest) => {
-    return Promise.resolve(
-      NextResponse.next({ request: { headers: new Headers(req.headers) } }),
-    );
-  }),
+  updateSession: vi
+    .fn()
+    .mockImplementation((req: NextRequest, extraRequestHeaders?: Record<string, string>) => {
+      const headers = new Headers(req.headers);
+      for (const [key, value] of Object.entries(extraRequestHeaders ?? {})) {
+        headers.set(key, value);
+      }
+      return Promise.resolve(NextResponse.next({ request: { headers } }));
+    }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -167,7 +171,9 @@ describe("timer middleware — セキュリティヘッダー", () => {
       expect(nonceInRequestCsp).toBe(nonceInResponseCsp);
     });
 
-    it("C-1: 自作の x-nonce override ヘルパーが撤去され、公式の NextRequest 差し替えパターンに置換されている", async () => {
+    // CodeRabbit PR#26 指摘: NextRequest の再構築は元 request の body を lock するため、
+    // ヘッダー伝播は `NextResponse.next({ request: { headers } })` (公式パターン) で行う。
+    it("C-1: 自作の override ヘルパーも NextRequest 再構築も使わず updateSession に追加ヘッダーを渡している", async () => {
       const fs = await import("node:fs");
       const path = await import("node:path");
       const source = fs.readFileSync(
@@ -175,7 +181,7 @@ describe("timer middleware — セキュリティヘッダー", () => {
         "utf-8",
       );
       expect(source).not.toContain("attachNonceRequestHeaderOverride");
-      expect(source).toContain("new NextRequest(request");
+      expect(source).not.toContain("new NextRequest(");
     });
 
     it("script-src に blob: が含まれる (FFmpeg WASM core/worker を blob スクリプトでロード)", async () => {

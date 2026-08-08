@@ -1,5 +1,5 @@
 import { updateSession } from "@/lib/supabase/middleware";
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 
 // NEXT_PUBLIC_SUPABASE_URL の origin を CSP connect-src に動的注入
 // ローカル Supabase (http://127.0.0.1:54321) やセルフホストなど *.supabase.co に
@@ -79,18 +79,14 @@ export async function middleware(request: NextRequest) {
   // スクリプト (self.__next_f.push(...)) にその nonce を使う。x-nonce だけでは JSON-LD
   // 用の値しか伝わらず、Next.js 自身が生成するスクリプトには適用されないため、
   // Content-Security-Policy 自体もリクエストヘッダーに乗せる必要がある。
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
-
-  // input が Request インスタンスの場合、NextRequest は super(input, init) を呼ぶため
-  // cookies / nextUrl も新しい headers から正しく再構築される。
-  const requestWithNonce = new NextRequest(request, { headers: requestHeaders });
-
-  // updateSession() 内部の NextResponse.next({ request }) が requestWithNonce.headers を
-  // そのまま x-middleware-override-headers 経由でレンダリングに引き渡す (updateSession
-  // 自体は無変更)。
-  const response = await updateSession(requestWithNonce);
+  //
+  // 伝播は updateSession() 内の `NextResponse.next({ request: { headers } })`
+  // (Next.js 公式パターン) で行う。NextRequest を再構築すると元 request の body が
+  // lock され、POST / PUT の下流読み取りを壊しうるため使わない。
+  const response = await updateSession(request, {
+    "x-nonce": nonce,
+    "Content-Security-Policy": csp,
+  });
 
   // セキュリティヘッダー (Issue #27)
   response.headers.set("X-Frame-Options", "DENY");

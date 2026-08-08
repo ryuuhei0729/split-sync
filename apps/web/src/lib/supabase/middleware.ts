@@ -1,8 +1,30 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+/**
+ * Supabase セッションを更新し、レンダリングへ引き渡すレスポンスを返す。
+ *
+ * @param request 受信リクエスト (Cookie 更新のため直接 mutate される)
+ * @param extraRequestHeaders レンダリング側のリクエストヘッダーに追加する値
+ *   (middleware.ts が CSP nonce / Content-Security-Policy を渡す)。
+ *   NextRequest を再構築せずに済むよう、`NextResponse.next({ request: { headers } })`
+ *   の公式パターンでオーバーライドする。
+ */
+export async function updateSession(
+  request: NextRequest,
+  extraRequestHeaders?: Record<string, string>,
+) {
+  // request.cookies.set() の結果 (Supabase のトークンリフレッシュ) を取り込むため、
+  // 呼び出しのたびに request.headers を読み直してから追加ヘッダーを重ねる。
+  const nextWithHeaders = () => {
+    const headers = new Headers(request.headers);
+    for (const [key, value] of Object.entries(extraRequestHeaders ?? {})) {
+      headers.set(key, value);
+    }
+    return NextResponse.next({ request: { headers } });
+  };
+
+  let response = nextWithHeaders();
   const pathname = request.nextUrl.pathname;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -20,7 +42,7 @@ export async function updateSession(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value);
         });
-        response = NextResponse.next({ request });
+        response = nextWithHeaders();
         cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);
         });
