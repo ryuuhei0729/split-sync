@@ -27,6 +27,12 @@ export async function POST(request: NextRequest) {
     let customerId: string | null = subData?.stripe_customer_id ?? null;
 
     if (!customerId) {
+      // user.id の UUID 形式を検証（Search API injection 防止）
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_REGEX.test(user.id)) {
+        return NextResponse.json({ error: "不正なユーザーIDです" }, { status: 400 });
+      }
+
       const existingCustomers = await stripe.customers.search({
         query: `metadata["supabase_user_id"]:"${user.id}"`,
       });

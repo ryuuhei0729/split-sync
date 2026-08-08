@@ -1,5 +1,5 @@
 import { updateSession } from "@/lib/supabase/middleware";
-import type { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 
 // NEXT_PUBLIC_SUPABASE_URL の origin を CSP connect-src に動的注入
 // ローカル Supabase (http://127.0.0.1:54321) やセルフホストなど *.supabase.co に
@@ -28,40 +28,69 @@ const FFMPEG_ORIGIN = (() => {
   }
 })();
 
+// CSP nonce をリクエストごとに生成する (Edge Runtime 互換: Web Crypto API を使用)
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes));
+}
+
 // CSP (Issue #17) — timer は FFmpeg WASM 用に wasm-unsafe-eval / worker-src blob: / R2 を許可
-const CSP = [
-  "default-src 'self'",
-  // blob: は FFmpeg WASM が core を blob URL のスクリプトとしてロードするため必須
-  // static.cloudflareinsights.com は Cloudflare Web Analytics のビーコンスクリプト
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://static.cloudflareinsights.com",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.supabase.co",
-  "media-src 'self' blob:",
-  "font-src 'self'",
-  [
-    // blob: は FFmpeg WASM ワーカーが core/wasm を blob URL から Fetch でロードするため必須
-    "connect-src 'self' blob:",
-    SUPABASE_ORIGIN,
-    SUPABASE_WS_ORIGIN,
-    "https://*.supabase.co",
-    "wss://*.supabase.co",
-    "https://api.stripe.com",
-    // Cloudflare Web Analytics のビーコン送信先
-    "https://cloudflareinsights.com",
-    FFMPEG_ORIGIN,
-  ]
-    .filter(Boolean)
-    .join(" "),
-  "worker-src 'self' blob:",
-  "frame-src 'none'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
+function buildCsp(nonce: string): string {
+  return [
+    "default-src 'self'",
+    // blob: は FFmpeg WASM が core を blob URL のスクリプトとしてロードするため必須
+    // static.cloudflareinsights.com は Cloudflare Web Analytics のビーコンスクリプト
+    // JSON-LD の inline <script> はリクエストごとの nonce で許可する ('unsafe-inline' は使わない)
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' blob: https://static.cloudflareinsights.com`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https://*.supabase.co",
+    "media-src 'self' blob:",
+    "font-src 'self'",
+    [
+      // blob: は FFmpeg WASM ワーカーが core/wasm を blob URL から Fetch でロードするため必須
+      "connect-src 'self' blob:",
+      SUPABASE_ORIGIN,
+      SUPABASE_WS_ORIGIN,
+      "https://*.supabase.co",
+      "wss://*.supabase.co",
+      "https://api.stripe.com",
+      // Cloudflare Web Analytics のビーコン送信先
+      "https://cloudflareinsights.com",
+      FFMPEG_ORIGIN,
+    ]
+      .filter(Boolean)
+      .join(" "),
+    "worker-src 'self' blob:",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
+}
 
 export async function middleware(request: NextRequest) {
-  const response = await updateSession(request);
+  const nonce = generateNonce();
+  const csp = buildCsp(nonce);
+
+  // Next.js は「リクエストヘッダーの Content-Security-Policy」から nonce を自前で
+  // 正規表現抽出し (getScriptNonceFromHeader)、RSC ストリーミングの自動生成インライン
+  // スクリプト (self.__next_f.push(...)) にその nonce を使う。x-nonce だけでは JSON-LD
+  // 用の値しか伝わらず、Next.js 自身が生成するスクリプトには適用されないため、
+  // Content-Security-Policy 自体もリクエストヘッダーに乗せる必要がある。
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  // input が Request インスタンスの場合、NextRequest は super(input, init) を呼ぶため
+  // cookies / nextUrl も新しい headers から正しく再構築される。
+  const requestWithNonce = new NextRequest(request, { headers: requestHeaders });
+
+  // updateSession() 内部の NextResponse.next({ request }) が requestWithNonce.headers を
+  // そのまま x-middleware-override-headers 経由でレンダリングに引き渡す (updateSession
+  // 自体は無変更)。
+  const response = await updateSession(requestWithNonce);
 
   // セキュリティヘッダー (Issue #27)
   response.headers.set("X-Frame-Options", "DENY");
@@ -70,7 +99,7 @@ export async function middleware(request: NextRequest) {
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 
   // CSP (Issue #17)
-  response.headers.set("Content-Security-Policy", CSP);
+  response.headers.set("Content-Security-Policy", csp);
 
   return response;
 }
