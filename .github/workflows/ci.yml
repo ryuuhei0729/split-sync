@@ -140,6 +140,22 @@ jobs:
           echo "::error::deno cache failed after 3 attempts (CDN 障害か deno.lock が古い)"
           exit 1
 
+      # デプロイされる Edge Function 本体の型チェック。pnpm の type-check は Node 側の
+      # tsconfig しか見ておらず supabase/functions/ は対象外で、テストも
+      # delete-user-storage しかカバーしていないため、stripe/revenucat webhook の
+      # 型崩れは従来どこにも引っかからなかった (実際に 18 件の型エラーが潜んでいた)。
+      # Warm step で全依存をキャッシュ済みのためネットワークアクセスは発生しない。
+      - name: Type check Edge Functions
+        run: |
+          fn_files=()
+          while IFS= read -r f; do fn_files+=("$f"); done \
+            < <(find supabase/functions -name '*.ts' | sort)
+          if [ ${#fn_files[@]} -eq 0 ]; then
+            echo "supabase/functions 配下に .ts が無いためスキップ"
+            exit 0
+          fi
+          deno check --frozen "${fn_files[@]}"
+
       # swim-hub / swimhub-scanner と同じ Supabase プロジェクトを共有しており、
       # supabase/functions/_shared/ 配下の本体コード (delete-user-storage-handler.ts 等) は
       # 3リポジトリでバイト単位同一に保つ運用のため、このテストが無いとドリフトを
