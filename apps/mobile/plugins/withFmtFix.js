@@ -1,4 +1,9 @@
-const { withDangerousMod } = require("@expo/config-plugins");
+// `@expo/config-plugins` を直接 require すると、依存として宣言していないため
+// pnpm の strict な node_modules 配置では apps/mobile から解決できない
+// (ローカルではルート node_modules へのホイスト副産物で偶然通るが、EAS ビルドの
+// サンドボックスでは再現されず `Cannot find module` でビルドが落ちる)。
+// expo 本体が同一バージョンを再エクスポートしており、expo は直接依存なので必ず解決できる。
+const { withDangerousMod } = require("expo/config-plugins");
 const fs = require("node:fs");
 const path = require("node:path");
 

@@ -106,12 +106,49 @@ jobs:
         with:
           deno-version: "2.9.4"
 
+      # Edge Function は esm.sh / deno.land から直接 import しており、CDN が 5xx を返すと
+      # コードが正しくても CI が落ちる (swimhub-scanner で esm.sh の 522 により実際に発生)。
+      # deno.lock が全依存を integrity ハッシュ付きで固定しているため、DENO_DIR をキャッシュして
+      # 通常の実行では CDN に一切触らせない。
+      - name: Cache Deno modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/deno
+          key: deno-2.9.4-${{ runner.os }}-${{ hashFiles('deno.lock') }}
+          restore-keys: |
+            deno-2.9.4-${{ runner.os }}-
+
+      # キャッシュミス時のみ CDN を叩く。ダウンロードだけをリトライ対象にすることで、
+      # 「CDN の一時障害」は再試行し「テストの失敗」は再試行しない (flaky test を隠さない)。
+      # --frozen を全 .ts に掛けることで deno.lock のカバレッジ不足も CI で検知する。
+      - name: Warm Deno module cache
+        run: |
+          fn_files=()
+          while IFS= read -r f; do fn_files+=("$f"); done \
+            < <(find supabase/functions -name '*.ts' | sort)
+          if [ ${#fn_files[@]} -eq 0 ]; then
+            echo "supabase/functions 配下に .ts が無いためスキップ"
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            if deno cache --frozen "${fn_files[@]}"; then
+              exit 0
+            fi
+            echo "::warning::deno cache failed (attempt ${attempt}/3)"
+            sleep $((attempt * 15))
+          done
+          echo "::error::deno cache failed after 3 attempts (CDN 障害か deno.lock が古い)"
+          exit 1
+
       # swim-hub / swimhub-scanner と同じ Supabase プロジェクトを共有しており、
       # supabase/functions/_shared/ 配下の本体コード (delete-user-storage-handler.ts 等) は
       # 3リポジトリでバイト単位同一に保つ運用のため、このテストが無いとドリフトを
       # 検知できない (swim-hub/.github/workflows/supabase.yml と同じ規約)。
       # `supabase functions test` は CLI から廃止されたため Deno で直接テストを実行する。
       # 実テストファイル（*.test.ts / *_test.ts）が存在する場合のみ実行する。
+      #
+      # --cached-only: Warm step で取得済みの依存のみ使用 (テスト中はネットワークに出ない)。
+      # --frozen:      deno.lock に無い依存が混入した場合に CI で検知する。
       - name: Test Edge Functions
         if: ${{ hashFiles('supabase/functions/**/*.test.ts', 'supabase/functions/**/*_test.ts') != '' }}
-        run: deno test --allow-env --allow-net supabase/functions/
+        run: deno test --allow-env --allow-net --cached-only --frozen supabase/functions/

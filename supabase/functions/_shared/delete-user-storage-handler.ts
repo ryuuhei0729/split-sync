@@ -166,6 +166,7 @@ async function listAllR2Keys(
 ): Promise<string[]> {
   const allKeys: string[] = [];
   let continuationToken: string | null = null;
+  const seenContinuationTokens = new Set<string>();
 
   do {
     const url = new URL(`${endpoint}/${bucket}`);
@@ -189,6 +190,17 @@ async function listAllR2Keys(
     const { keys, isTruncated, nextContinuationToken } = parseListObjectsV2Xml(xml);
     allKeys.push(...keys);
     continuationToken = isTruncated ? nextContinuationToken : null;
+
+    // R2/中間層が同じ continuation token を繰り返し返すと do...while が終了せず
+    // Edge Function が応答不能になる。既出トークンを検出したら fail-closed で中断する。
+    if (continuationToken) {
+      if (seenContinuationTokens.has(continuationToken)) {
+        throw new Error(
+          `R2 ListObjectsV2 returned a repeated continuation token for bucket ${bucket} (prefix=${prefix})`,
+        );
+      }
+      seenContinuationTokens.add(continuationToken);
+    }
   } while (continuationToken);
 
   return allKeys;
