@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
@@ -482,7 +483,14 @@ function PasswordRequirementsList({
                 met ? "text-emerald-600" : "text-muted-foreground"
               }`}
             >
-              <span aria-hidden="true">{met ? "✓" : "○"}</span>
+              {met ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 rounded-full border border-border"
+                />
+              )}
               <span>{label}</span>
             </li>
           );

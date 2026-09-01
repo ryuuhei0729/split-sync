@@ -1,3 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# レイアウト系の設定はここに置く。.npmrc は `${NODE_AUTH_TOKEN}` 未定義時に
+# ファイルごと破棄されるため設定の置き場として信頼できない (.npmrc のコメント参照)。
+# React Native / CocoaPods / babel は isolated レイアウトの symlink を辿れないので
+# hoisted 必須。
+nodeLinker: hoisted
+linkWorkspacePackages: true
+autoInstallPeers: true
