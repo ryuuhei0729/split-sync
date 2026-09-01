@@ -128,9 +128,10 @@ describe("drawPassedSplit", () => {
 
   it("renders below the timer without throwing (with and without memo)", () => {
     const ctx = makeMockCtx();
-    expect(() => drawPassedSplit(ctx, SIZE, BASE, 30.5, SPLITS[0])).not.toThrow();
+    // SPLITS is a fixed 2-element fixture declared above; index 0/1 always exist.
+    expect(() => drawPassedSplit(ctx, SIZE, BASE, 30.5, SPLITS[0]!)).not.toThrow();
     expect(() =>
-      drawPassedSplit(ctx, SIZE, BASE, 30.5, { ...SPLITS[0], memo: "ドルフィン5回" }),
+      drawPassedSplit(ctx, SIZE, BASE, 30.5, { ...SPLITS[0]!, memo: "ドルフィン5回" }),
     ).not.toThrow();
     expect(vi.mocked(ctx.fillText).mock.calls.length).toBeGreaterThan(0);
   });
@@ -140,7 +141,7 @@ describe("drawPassedSplit", () => {
     const cfg = { ...BASE, position: { x: 0, y: 0 }, anchor: "top-left" as const };
     const bounds = getStopwatchBounds(ctx, SIZE, cfg, 30.5);
     vi.clearAllMocks();
-    drawPassedSplit(ctx, SIZE, cfg, 30.5, SPLITS[1]);
+    drawPassedSplit(ctx, SIZE, cfg, 30.5, SPLITS[1]!); // SPLITS is a fixed 2-element fixture; index 1 always exists.
     const ys = vi.mocked(ctx.fillText).mock.calls.map((c) => c[2] as number);
     expect(ys.length).toBeGreaterThan(0);
     for (const y of ys) expect(y).toBeGreaterThanOrEqual(bounds.y + bounds.height);
@@ -148,7 +149,7 @@ describe("drawPassedSplit", () => {
 
   it("renders the exact headline text formatTime produces", () => {
     const ctx = makeMockCtx();
-    drawPassedSplit(ctx, SIZE, BASE, 30.5, SPLITS[0]); // 50m @30.5, lap 30.5
+    drawPassedSplit(ctx, SIZE, BASE, 30.5, SPLITS[0]!); // 50m @30.5, lap 30.5; SPLITS is a fixed fixture
     const texts = vi.mocked(ctx.fillText).mock.calls.map((c) => c[0]);
     // fillTextTabular splits into per-char calls; the joined sequence must
     // contain the headline characters in order.
@@ -243,7 +244,9 @@ describe("drawWatermark", () => {
     drawWatermark(b, SIZE, null, { heightFactor: 0.06, minFontSize: 16 });
     const fa = a.font; // last font set
     const fb = b.font;
-    const sizeOf = (f: string) => parseInt(f.match(/(\d+)px/)![1], 10);
+    // The regex's capture group is mandatory, so a successful (non-null-asserted) match
+    // always has group 1.
+    const sizeOf = (f: string) => parseInt(f.match(/(\d+)px/)![1]!, 10);
     expect(sizeOf(fb)).toBeGreaterThan(sizeOf(fa));
   });
 

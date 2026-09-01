@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (existingCustomers.data.length > 0) {
-        customerId = existingCustomers.data[0].id;
+        // existingCustomers.data.length > 0 is checked in this same if-block, same array/scope.
+        customerId = existingCustomers.data[0]!.id;
       } else {
         const newCustomer = await stripe.customers.create({
           email: user.email,

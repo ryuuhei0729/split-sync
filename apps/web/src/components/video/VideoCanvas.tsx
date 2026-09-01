@@ -339,8 +339,9 @@ export function VideoCanvas() {
           const summaryVisible =
             isFinished && finishTime !== null && elapsed >= finishTime;
           if (summaryVisible) {
-            const t0 = e.touches[0];
-            const t1 = e.touches[1];
+            // e.touches.length === 2 is checked above, same TouchList/scope.
+            const t0 = e.touches[0]!;
+            const t1 = e.touches[1]!;
             const dx = t1.clientX - t0.clientX;
             const dy = t1.clientY - t0.clientY;
             const startDist = Math.sqrt(dx * dx + dy * dy);
@@ -351,7 +352,7 @@ export function VideoCanvas() {
         return;
       }
       if (e.touches.length !== 1) return;
-      const t = e.touches[0];
+      const t = e.touches[0]!; // e.touches.length !== 1 returned above, same TouchList/scope.
       handlePointerDown(t.clientX, t.clientY);
     },
     [handlePointerDown, isFinished, finishTime, startTime, stopwatchConfig.summaryScale],
@@ -360,8 +361,9 @@ export function VideoCanvas() {
     (e: React.TouchEvent<HTMLCanvasElement>) => {
       e.preventDefault();
       if (e.touches.length === 2 && pinchStateRef.current) {
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
+        // e.touches.length === 2 is checked above, same TouchList/scope.
+        const t0 = e.touches[0]!;
+        const t1 = e.touches[1]!;
         const dx = t1.clientX - t0.clientX;
         const dy = t1.clientY - t0.clientY;
         const currentDist = Math.sqrt(dx * dx + dy * dy);
@@ -371,7 +373,7 @@ export function VideoCanvas() {
         return;
       }
       if (e.touches.length !== 1) return;
-      const t = e.touches[0];
+      const t = e.touches[0]!; // e.touches.length !== 1 returned above, same TouchList/scope.
       handlePointerMove(t.clientX, t.clientY);
     },
     [handlePointerMove, updateStopwatchConfig],

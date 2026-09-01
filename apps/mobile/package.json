@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "test": "jest",
     "lint": "eslint",
+    "type-check": "tsc --noEmit",
     "ios:bump-build": "plutil -replace CFBundleVersion -string $(($(plutil -extract CFBundleVersion raw ios/SHTimer/Info.plist) + 1)) ios/SHTimer/Info.plist && plutil -extract CFBundleVersion raw ios/SHTimer/Info.plist",
     "build:ios:local": "pnpm ios:bump-build && eas build --platform ios --profile production --local"
   },

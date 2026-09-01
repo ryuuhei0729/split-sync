@@ -124,15 +124,17 @@ describe("両経路が同一の共有描画関数を同じ引数で呼ぶこと 
 
     compositeFrame(makeWebCodecsContext(), webCodecsInput);
     const webCodecsCall = vi.mocked(drawStopwatch).mock.calls[0];
+    expect(webCodecsCall).toBeDefined(); // drawStopwatch must have been called on this path
     vi.clearAllMocks();
 
     compositeOverlayFrame(makeOverlayContext(), overlayInput);
     const overlayCall = vi.mocked(drawStopwatch).mock.calls[0];
+    expect(overlayCall).toBeDefined(); // drawStopwatch must have been called on this path
 
     // 引数[1]=size, [2]=config, [3]=elapsed を比較 (引数[0]=ctxは経路ごとに別インスタンスなので除外)
-    expect(overlayCall[1]).toEqual(webCodecsCall[1]);
-    expect(overlayCall[2]).toEqual(webCodecsCall[2]);
-    expect(overlayCall[3]).toEqual(webCodecsCall[3]);
+    expect(overlayCall![1]).toEqual(webCodecsCall![1]);
+    expect(overlayCall![2]).toEqual(webCodecsCall![2]);
+    expect(overlayCall![3]).toEqual(webCodecsCall![3]);
   });
 
   it("[V-18] 同一 splitTimes で、両経路とも同じ区間判定 (elapsed>=split.time && elapsed<split.time+SPLIT_DISPLAY_DURATION_SECONDS) で drawPassedSplit を呼ぶ", () => {

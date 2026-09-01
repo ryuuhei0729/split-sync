@@ -52,6 +52,7 @@ export function detectStartSignal(audioData: AudioData): DetectedSignal | null {
 
     for (let bin = beepLowBin; bin <= beepHighBin && bin < spectrum.length; bin++) {
       const mag = spectrum[bin];
+      if (mag === undefined) continue; // bin < spectrum.length is enforced by the loop condition; guard is defensive only
       totalEnergy += mag;
       if (mag > peakMag) {
         peakMag = mag;
@@ -66,7 +67,9 @@ export function detectStartSignal(audioData: AudioData): DetectedSignal | null {
       bin <= Math.min(beepHighBin, peakBin + peakRadius) && bin < spectrum.length;
       bin++
     ) {
-      peakRegionEnergy += spectrum[bin];
+      const mag = spectrum[bin];
+      if (mag === undefined) continue; // bin < spectrum.length is enforced by the loop condition; guard is defensive only
+      peakRegionEnergy += mag;
     }
 
     const tonality = totalEnergy > 0 ? peakRegionEnergy / totalEnergy : 0;
@@ -82,6 +85,8 @@ export function detectStartSignal(audioData: AudioData): DetectedSignal | null {
 
   const sortedEnergy = [...frameEnergy].sort((a, b) => a - b);
   const medianEnergy = sortedEnergy[Math.floor(sortedEnergy.length / 2)];
+  if (medianEnergy === undefined) return null; // sortedEnergy.length === numWindows, and numWindows >= 2
+                                                  // is already checked above; guard is defensive against drift
   const energyThreshold = medianEnergy * 0.5;
 
   const minRunFrames = Math.ceil((0.15 * sampleRate) / hopSize);
@@ -100,7 +105,11 @@ export function detectStartSignal(audioData: AudioData): DetectedSignal | null {
   let gapCount = 0;
 
   for (let i = 0; i < numWindows; i++) {
-    const isTonal = frameTonality[i] >= tonalityThreshold && frameEnergy[i] >= energyThreshold;
+    const tonality = frameTonality[i];
+    const energy = frameEnergy[i];
+    if (tonality === undefined || energy === undefined) continue; // frameTonality/frameEnergy have
+      // exactly numWindows entries pushed in the loop above; guard is defensive only
+    const isTonal = tonality >= tonalityThreshold && energy >= energyThreshold;
 
     if (isTonal) {
       if (runStart === -1) {
@@ -147,7 +156,8 @@ export function detectStartSignal(audioData: AudioData): DetectedSignal | null {
     }));
     const maxScore = Math.max(...scored.map((s) => s.score));
     const topCandidates = scored.filter((s) => s.score >= maxScore * 0.5);
-    bestRun = topCandidates[topCandidates.length - 1].run;
+    const top = topCandidates[topCandidates.length - 1];
+    if (top) bestRun = top.run;
   }
   // If only whistle-range runs were found, do NOT fall back to a whistle — it's
   // not the start beep. Return null so the user sets the start manually.
@@ -172,9 +182,14 @@ function buildRun(
   let energySum = 0;
   let count = 0;
   for (let j = startFrame; j <= endFrame; j++) {
-    freqSum += frameDominantFreq[j];
-    tonalSum += frameTonality[j];
-    energySum += frameEnergy[j];
+    const freq = frameDominantFreq[j];
+    const tonal = frameTonality[j];
+    const energy = frameEnergy[j];
+    if (freq === undefined || tonal === undefined || energy === undefined) continue;
+    // Caller guarantees startFrame/endFrame are within the arrays' bounds; guard is defensive only.
+    freqSum += freq;
+    tonalSum += tonal;
+    energySum += energy;
     count++;
   }
   return {

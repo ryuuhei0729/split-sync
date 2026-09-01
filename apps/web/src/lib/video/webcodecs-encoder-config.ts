@@ -124,7 +124,8 @@ function pickAvcLevel(width: number, height: number, fps: number, bitrate: numbe
   );
   // If nothing fits (extreme resolution/fps/bitrate), use the highest level we know about —
   // isConfigSupported() will correctly report unsupported and the caller falls back to ffmpeg.
-  return fit ?? AVC_LEVELS[AVC_LEVELS.length - 1];
+  // AVC_LEVELS is a non-empty literal array declared immediately above.
+  return fit ?? AVC_LEVELS[AVC_LEVELS.length - 1]!;
 }
 
 function buildAvcCodecString(level: number): string {

@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "paths": {
       "@swimhub-timer/shared": ["../shared/index.ts"],
       "@swimhub-timer/shared/*": ["../shared/*"],
