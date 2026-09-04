@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Stripe の顧客情報が見つかりません" }, { status: 404 });
       }
 
-      customerId = existingCustomers.data[0].id;
+      // The "not found" (length === 0) branch above already returned, so index 0 exists here.
+      customerId = existingCustomers.data[0]!.id;
 
       await supabase
         .from("user_subscriptions")

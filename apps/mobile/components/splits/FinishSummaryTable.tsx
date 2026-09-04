@@ -49,7 +49,10 @@ export function FinishSummaryTable({
   // as the largest split distance present.
   const sortedSplits = [...splitTimes].sort((a, b) => a.distance - b.distance);
   const effectiveRace =
-    raceDistance ?? (sortedSplits.length > 0 ? sortedSplits[sortedSplits.length - 1].distance : 0);
+    raceDistance ??
+    (sortedSplits.length > 0 ? sortedSplits[sortedSplits.length - 1]!.distance : 0);
+    // sortedSplits.length > 0 is checked in this same ternary condition,
+    // so index length-1 is always in-bounds.
   const raceRows = effectiveRace > 0
     ? calculateRaceLapTimesTable(
         sortedSplits.map((s) => ({ distance: s.distance, splitTime: s.time })),

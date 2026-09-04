@@ -9,8 +9,10 @@ import type {
 } from "@swimhub-timer/shared";
 import { STOPWATCH_PRESETS } from "@swimhub-timer/shared";
 
+// STOPWATCH_PRESETS is a non-empty literal array (see stopwatch-presets.ts),
+// so the [0] fallback below is always defined.
 const MOBILE_BASE_PRESET =
-  STOPWATCH_PRESETS.find((p) => p.id === "minimal-white") ?? STOPWATCH_PRESETS[0];
+  STOPWATCH_PRESETS.find((p) => p.id === "minimal-white") ?? STOPWATCH_PRESETS[0]!;
 
 // Mobile is locked to the minimal-white preset, but with a slightly darker
 // backdrop so the timer reads cleanly over light pool footage.

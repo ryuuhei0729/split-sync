@@ -50,6 +50,7 @@ describe("STOPWATCH_PRESETS", () => {
 
 describe("DEFAULT_STOPWATCH_CONFIG", () => {
   it("equals the first preset config", () => {
-    expect(DEFAULT_STOPWATCH_CONFIG).toBe(STOPWATCH_PRESETS[0].config);
+    // STOPWATCH_PRESETS is a non-empty literal array (see stopwatch-presets.ts).
+    expect(DEFAULT_STOPWATCH_CONFIG).toBe(STOPWATCH_PRESETS[0]!.config);
   });
 });

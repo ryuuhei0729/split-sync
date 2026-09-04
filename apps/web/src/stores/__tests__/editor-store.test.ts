@@ -99,7 +99,8 @@ describe("editor-store — finishRecording with raceDistance", () => {
     // 重複がなく1件のみ
     expect(hundredSplits).toHaveLength(1);
     // finishRecording の値で上書きされている
-    expect(hundredSplits[0].time).toBe(65.0);
+    // toHaveLength(1) above already proves hundredSplits[0] exists.
+    expect(hundredSplits[0]!.time).toBe(65.0);
   });
 
   it("[V-10] raceDistance=null のとき finishRecording を呼んでも splitTimes に変化なし", () => {
@@ -140,10 +141,10 @@ describe("editor-store — finishRecording with raceDistance", () => {
     const { splitTimes } = getStore();
     // 距離が昇順であることを確認
     for (let i = 1; i < splitTimes.length; i++) {
-      expect(splitTimes[i].distance).toBeGreaterThan(splitTimes[i - 1].distance);
+      expect(splitTimes[i]!.distance).toBeGreaterThan(splitTimes[i - 1]!.distance);
     }
-    expect(splitTimes[0].distance).toBe(50);
-    expect(splitTimes[1].distance).toBe(100);
+    expect(splitTimes[0]!.distance).toBe(50);
+    expect(splitTimes[1]!.distance).toBe(100);
   });
 });
 

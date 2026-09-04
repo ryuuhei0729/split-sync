@@ -64,4 +64,5 @@ export const STOPWATCH_PRESETS: StopwatchPreset[] = [
   },
 ];
 
-export const DEFAULT_STOPWATCH_CONFIG = STOPWATCH_PRESETS[0].config;
+// STOPWATCH_PRESETS is a non-empty literal array declared immediately above.
+export const DEFAULT_STOPWATCH_CONFIG = STOPWATCH_PRESETS[0]!.config;

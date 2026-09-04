@@ -249,14 +249,15 @@ export function StopwatchOverlay({ videoWidth, videoHeight, hideVisuals = false 
           summaryDidMove.current = false;
           summaryGrantTime.current = Date.now();
           if (touches.length >= 2) {
-            const dx = touches[0].pageX - touches[1].pageX;
-            const dy = touches[0].pageY - touches[1].pageY;
+            // touches.length >= 2 is checked in this same if-block, same array/scope.
+            const dx = touches[0]!.pageX - touches[1]!.pageX;
+            const dy = touches[0]!.pageY - touches[1]!.pageY;
             summaryGesture.current = {
               mode: "pinch",
               posStart: { x: cfg.summaryPosition.x, y: cfg.summaryPosition.y },
               scaleStart: cfg.summaryScale,
               pinchDistanceStart: Math.sqrt(dx * dx + dy * dy),
-              panAnchor: { pageX: touches[0].pageX, pageY: touches[0].pageY },
+              panAnchor: { pageX: touches[0]!.pageX, pageY: touches[0]!.pageY },
             };
           } else {
             const t0 = touches[0] ?? { pageX: 0, pageY: 0 };
@@ -284,8 +285,9 @@ export function StopwatchOverlay({ videoWidth, videoHeight, hideVisuals = false 
           if (touches.length >= 2) {
             // Pinch still works regardless of edit mode (multi-touch is an
             // explicit resize gesture).
-            const dx = touches[0].pageX - touches[1].pageX;
-            const dy = touches[0].pageY - touches[1].pageY;
+            // touches.length >= 2 is checked in this same if-block, same array/scope.
+            const dx = touches[0]!.pageX - touches[1]!.pageX;
+            const dy = touches[0]!.pageY - touches[1]!.pageY;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
             if (g.mode !== "pinch" || g.pinchDistanceStart <= 0) {
@@ -294,7 +296,7 @@ export function StopwatchOverlay({ videoWidth, videoHeight, hideVisuals = false 
                 posStart: { x: cfg.summaryPosition.x, y: cfg.summaryPosition.y },
                 scaleStart: cfg.summaryScale,
                 pinchDistanceStart: dist,
-                panAnchor: { pageX: touches[0].pageX, pageY: touches[0].pageY },
+                panAnchor: { pageX: touches[0]!.pageX, pageY: touches[0]!.pageY },
               };
               return;
             }
@@ -433,6 +435,8 @@ export function StopwatchOverlay({ videoWidth, videoHeight, hideVisuals = false 
     const sorted = [...splitTimes].sort((a, b) => a.time - b.time);
     for (let i = sorted.length - 1; i >= 0; i--) {
       const s = sorted[i];
+      if (!s) continue; // i stays within [0, sorted.length) by the loop bound,
+                         // so s is always defined; guard is defensive against future drift
       if (isFinished && finishTime !== null && raceDistance !== null) {
         if (s.distance === raceDistance && s.time === finishTime) continue;
       }

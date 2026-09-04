@@ -2,6 +2,13 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    // extends: "expo/tsconfig.base" は timer 自身の tsconfig.base.json を継承しないため、
+    // isolatedModules / forceConsistentCasingInFileNames が欠落していた。直接指定して補う。
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    // module: preserve は expo/tsconfig.base 由来。ESNext + moduleResolution: bundler でも
+    // 型エラー 0 だが、上流の既定を尊重して維持する（2026-09-01 検証）。
     "paths": {
       "@swimhub-timer/shared": ["../shared/index.ts"],
       "@swimhub-timer/shared/*": ["../shared/*"],

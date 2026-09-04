@@ -379,6 +379,8 @@ export default function ExportScreen() {
               isFinished && finishTime !== null ? Math.min(elapsed, finishTime) : elapsed;
             for (let i = sortedSplits.length - 1; i >= 0; i--) {
               const s = sortedSplits[i];
+              if (!s) continue; // i stays within [0, sortedSplits.length) by the loop bound,
+                                 // so s is always defined; guard is defensive against future drift
               if (isFinished && finishTime !== null && raceDistance !== null) {
                 if (s.distance === raceDistance && s.time === finishTime) continue;
               }

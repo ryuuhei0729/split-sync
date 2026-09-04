@@ -36,7 +36,10 @@ function computeSummaryLayout(
 
   const sortedSplits = [...splitTimes].sort((a, b) => a.distance - b.distance);
   const effectiveRace =
-    raceDistance ?? (sortedSplits.length > 0 ? sortedSplits[sortedSplits.length - 1].distance : 0);
+    raceDistance ??
+    // sortedSplits.length > 0 is checked in this same ternary condition,
+    // so index length-1 is always in-bounds.
+    (sortedSplits.length > 0 ? sortedSplits[sortedSplits.length - 1]!.distance : 0);
 
   const raceRows =
     effectiveRace > 0
@@ -146,8 +149,11 @@ export function drawFinishSummary(
 
   // Lap interval columns are center-aligned within their cell content area
   // (the trailing `pad` in colWidths is a gutter to the next column, so the
-  // visible cell width is colWidths[i] - pad).
-  const lapCellContentWidth = (ci: number) => colWidths[ci] - pad;
+  // visible cell width is colWidths[i] - pad). colWidths has one entry per
+  // column (2 base columns + one per lap interval, see construction above);
+  // callers only ever pass indices within that range, so `?? 0` never
+  // actually triggers — it's a defensive fallback, not a meaningful value.
+  const lapCellContentWidth = (ci: number) => (colWidths[ci] ?? 0) - pad;
 
   // Header row
   ctx.font = `${headerFontSize}px ${config.fontFamily}`;
@@ -156,13 +162,18 @@ export function drawFinishSummary(
   const headerY = y + pad;
   for (let ci = 0; ci < cols.length; ci++) {
     const label = cols[ci];
+    const width = colWidths[ci];
+    // cols and colWidths are built with the same number of entries (see
+    // construction above), and ci < cols.length is enforced by the loop
+    // condition; guard is defensive only.
+    if (label === undefined || width === undefined) continue;
     if (ci >= 2) {
       const w = ctx.measureText(label).width;
       ctx.fillText(label, cx + (lapCellContentWidth(ci) - w) / 2, headerY);
     } else {
       ctx.fillText(label, cx, headerY);
     }
-    cx += colWidths[ci];
+    cx += width;
   }
   ctx.globalAlpha = 1.0;
 
@@ -173,16 +184,22 @@ export function drawFinishSummary(
   for (const row of raceRows) {
     cx = x + pad;
     ctx.fillText(`${row.distance}m`, cx, rowY);
-    cx += colWidths[0];
+    // colWidths always has at least 2 entries: distW+pad and splitW+pad
+    // (see construction above).
+    cx += colWidths[0]!;
     fillTextTabular(ctx, row.splitTime !== null ? formatTime(row.splitTime) : "-", cx, rowY);
-    cx += colWidths[1];
+    cx += colWidths[1]!;
     for (let ci = 0; ci < intervals.length; ci++) {
-      const lap = row.lapTimes[intervals[ci]];
+      const interval = intervals[ci];
+      if (interval === undefined) continue; // ci < intervals.length is enforced by the loop condition; guard is defensive only
+      const lap = row.lapTimes[interval];
       const text = lap !== null && lap !== undefined ? formatTime(lap) : "-";
       const w = measureTextTabular(ctx, text);
       const colIdx = 2 + ci;
+      const width = colWidths[colIdx];
+      if (width === undefined) continue; // colWidths has one entry per column; guard is defensive only
       fillTextTabular(ctx, text, cx + (lapCellContentWidth(colIdx) - w) / 2, rowY);
-      cx += colWidths[colIdx];
+      cx += width;
     }
     rowY += rowHeight;
   }
@@ -195,14 +212,16 @@ export function drawFinishSummary(
 
     cx = x + pad;
     ctx.fillText(`${effectiveRace}m`, cx, rowY);
-    cx += colWidths[0];
+    cx += colWidths[0]!; // see the "colWidths always has at least 2 entries" note above
     fillTextTabular(ctx, formatTime(finishTime), cx, rowY);
-    cx += colWidths[1];
+    cx += colWidths[1]!;
     for (let ci = 0; ci < intervals.length; ci++) {
       const colIdx = 2 + ci;
       const w = ctx.measureText("-").width;
+      const width = colWidths[colIdx];
+      if (width === undefined) continue; // colWidths has one entry per column; guard is defensive only
       ctx.fillText("-", cx + (lapCellContentWidth(colIdx) - w) / 2, rowY);
-      cx += colWidths[colIdx];
+      cx += width;
     }
   }
 }

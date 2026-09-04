@@ -32,7 +32,9 @@ export function generateWaveform(
     const end = Math.min(start + samplesPerBucket, channelData.length);
     let max = 0;
     for (let j = start; j < end; j++) {
-      const abs = Math.abs(channelData[j]);
+      const sample = channelData[j];
+      if (sample === undefined) continue; // end <= channelData.length, so j is always in-bounds; guard is defensive only
+      const abs = Math.abs(sample);
       if (abs > max) max = abs;
     }
     waveform[i] = max;

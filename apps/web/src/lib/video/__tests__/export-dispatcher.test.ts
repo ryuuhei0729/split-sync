@@ -118,7 +118,8 @@ describe("dispatchVideoExport — 実行時フォールバック (最重要: PM�
     const callArgs = vi.mocked(exportVideoWithStopwatch).mock.calls[0];
     expect(callArgs).toHaveLength(1);
 
-    const passedOptions = callArgs[0];
+    // toHaveLength(1) above already proves callArgs exists and has one element.
+    const passedOptions = callArgs![0];
     expect(passedOptions).toBe(options); // 参照同一 (再構築・部分コピーされていない)
     expect(passedOptions.splitTimes).toBe(splitTimes);
     expect(passedOptions.isFinished).toBe(true);

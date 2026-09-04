@@ -4,7 +4,9 @@
 export function applyHannWindow(data: Float32Array): void {
   const N = data.length;
   for (let i = 0; i < N; i++) {
-    data[i] *= 0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1)));
+    const v = data[i];
+    if (v === undefined) continue; // i < N === data.length is enforced by the loop condition; guard is defensive only
+    data[i] = v * (0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1))));
   }
 }
 
@@ -24,7 +26,10 @@ export function computeMagnitudeSpectrum(data: Float32Array): Float32Array {
   const halfN = N / 2;
   const magnitudes = new Float32Array(halfN);
   for (let i = 0; i < halfN; i++) {
-    magnitudes[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+    const re = real[i];
+    const im = imag[i];
+    if (re === undefined || im === undefined) continue; // i < halfN <= N === real.length === imag.length; guard is defensive only
+    magnitudes[i] = Math.sqrt(re * re + im * im);
   }
   return magnitudes;
 }
@@ -40,8 +45,17 @@ function fftInPlace(real: Float32Array, imag: Float32Array): void {
   for (let i = 0; i < N; i++) {
     const j = bitReverse(i, logN);
     if (j > i) {
-      [real[i], real[j]] = [real[j], real[i]];
-      [imag[i], imag[j]] = [imag[j], imag[i]];
+      const ri = real[i];
+      const rj = real[j];
+      const ii = imag[i];
+      const ij = imag[j];
+      // i, j are both < N: bitReverse mirrors the logN bits of a value < N,
+      // which always stays < N; guard is defensive only.
+      if (ri === undefined || rj === undefined || ii === undefined || ij === undefined) continue;
+      real[i] = rj;
+      real[j] = ri;
+      imag[i] = ij;
+      imag[j] = ii;
     }
   }
 
@@ -57,13 +71,30 @@ function fftInPlace(real: Float32Array, imag: Float32Array): void {
       let curImag = 0;
 
       for (let j = 0; j < halfM; j++) {
-        const tReal = curReal * real[k + j + halfM] - curImag * imag[k + j + halfM];
-        const tImag = curReal * imag[k + j + halfM] + curImag * real[k + j + halfM];
+        const idxHi = k + j + halfM;
+        const idxLo = k + j;
+        const realHi = real[idxHi];
+        const imagHi = imag[idxHi];
+        const realLo = real[idxLo];
+        const imagLo = imag[idxLo];
+        // idxLo/idxHi stay within [0, N) for a power-of-2-length input
+        // (the documented FFT precondition); guard is defensive only.
+        if (
+          realHi === undefined ||
+          imagHi === undefined ||
+          realLo === undefined ||
+          imagLo === undefined
+        ) {
+          continue;
+        }
 
-        real[k + j + halfM] = real[k + j] - tReal;
-        imag[k + j + halfM] = imag[k + j] - tImag;
-        real[k + j] += tReal;
-        imag[k + j] += tImag;
+        const tReal = curReal * realHi - curImag * imagHi;
+        const tImag = curReal * imagHi + curImag * realHi;
+
+        real[idxHi] = realLo - tReal;
+        imag[idxHi] = imagLo - tImag;
+        real[idxLo] = realLo + tReal;
+        imag[idxLo] = imagLo + tImag;
 
         const nextReal = curReal * wReal - curImag * wImag;
         const nextImag = curReal * wImag + curImag * wReal;
@@ -90,8 +121,14 @@ function bitReverse(x: number, bits: number): number {
 export function findPeaks(data: number[], threshold: number, minDistance: number = 10): number[] {
   const peaks: number[] = [];
   for (let i = 1; i < data.length - 1; i++) {
-    if (data[i] > threshold && data[i] > data[i - 1] && data[i] >= data[i + 1]) {
-      if (peaks.length === 0 || i - peaks[peaks.length - 1] >= minDistance) {
+    const prev = data[i - 1];
+    const curr = data[i];
+    const next = data[i + 1];
+    // 1 <= i <= data.length - 2, so i-1/i/i+1 stay within [0, data.length); guard is defensive only.
+    if (prev === undefined || curr === undefined || next === undefined) continue;
+    if (curr > threshold && curr > prev && curr >= next) {
+      // peaks.length === 0 is checked in this same condition before the index access.
+      if (peaks.length === 0 || i - peaks[peaks.length - 1]! >= minDistance) {
         peaks.push(i);
       }
     }

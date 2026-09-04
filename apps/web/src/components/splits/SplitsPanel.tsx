@@ -52,8 +52,11 @@ export function SplitsPanel() {
   const sortedByDistance = [...splitTimes].sort((a, b) => a.distance - b.distance);
   const lapByDistance = new Map<number, number>();
   for (let i = 0; i < sortedByDistance.length; i++) {
-    const prevTime = i === 0 ? 0 : sortedByDistance[i - 1].time;
-    lapByDistance.set(sortedByDistance[i].distance, sortedByDistance[i].time - prevTime);
+    const curr = sortedByDistance[i];
+    if (!curr) continue; // i stays within [0, sortedByDistance.length); guard is defensive only
+    const prevSplit = sortedByDistance[i - 1];
+    const prevTime = i === 0 || !prevSplit ? 0 : prevSplit.time;
+    lapByDistance.set(curr.distance, curr.time - prevTime);
   }
 
   const handleRecord = () => {

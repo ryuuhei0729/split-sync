@@ -37,9 +37,10 @@ export function WaveformDisplay({ height = 80, onClickTime }: WaveformDisplayPro
     const barWidth = Math.max(1, w / waveformData.length);
 
     for (let i = 0; i < waveformData.length; i++) {
-      const x = (i / waveformData.length) * w;
-      const barHeight = waveformData[i] * h * 0.9;
       const intensity = waveformData[i];
+      if (intensity === undefined) continue; // i < waveformData.length is enforced by the loop condition; guard is defensive only
+      const x = (i / waveformData.length) * w;
+      const barHeight = intensity * h * 0.9;
 
       // Brighter bars for louder sections
       const alpha = 0.2 + intensity * 0.6;
