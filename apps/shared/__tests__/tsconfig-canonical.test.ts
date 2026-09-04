@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 /**
@@ -35,11 +36,22 @@ import path from "node:path";
  *     jsx はこのプロジェクトに限り assert しない (QA report で PM に確認を仰ぐ)。
  */
 
+// tsc は `npx` 経由でなく `node <tscの実パス>` で直接起動する。
+// npx は `--no-install` でも npm CLI 自体をロードするため、低速な CI runner では
+// tsc 本体を上回る起動コストを毎回払うことになる (既定 5s タイムアウトを
+// 超えて CI が落ちた実例あり)。typescript はこの workspace の devDependency なので
+// 解決はローカルで完結し、ネットワークアクセスも発生しない。
+const tscPath = createRequire(import.meta.url).resolve("typescript/bin/tsc");
+
+// tsc の起動は 1 回あたり数百 ms かかる。CI runner の遅さ (ローカルの 3〜5 倍) と
+// 初回実行の cold start を吸収するため、各 it に既定 (5s) より長いタイムアウトを与える。
+// これは遅いテストを黙らせるためではなく、設定ドリフト検知の失敗を
+// マシン速度に依存させないため。
+const TSC_TIMEOUT_MS = 30_000;
+
 function showConfig(relTsconfigPath: string): Record<string, unknown> {
-  // require.resolve は使わず、ローカル解決のみで済ませるため `--no-install` を付ける
-  // (ネットワークアクセスなし)。
   const cfgPath = path.resolve(process.cwd(), relTsconfigPath);
-  const out = execFileSync("npx", ["--no-install", "tsc", "--showConfig", "-p", cfgPath], {
+  const out = execFileSync(process.execPath, [tscPath, "--showConfig", "-p", cfgPath], {
     encoding: "utf8",
   });
   return (JSON.parse(out).compilerOptions ?? {}) as Record<string, unknown>;
@@ -69,7 +81,7 @@ describe("Sprint #14 tsconfig canonical values (swimhub-timer)", () => {
     expect(normalizeLib(co.lib)).toEqual(["dom", "dom.iterable", "es2022"]);
     expect(co.plugins).toMatchObject([{ name: "next" }]);
     // jsx は意図的に assert しない (ファイル冒頭コメント参照)。
-  });
+  }, TSC_TIMEOUT_MS);
 
   it("apps/mobile: target/module の逸脱 (esnext/preserve) は維持。noUncheckedIndexedAccess のみ新規に true化", () => {
     const co = showConfig("../mobile/tsconfig.json");
@@ -92,7 +104,7 @@ describe("Sprint #14 tsconfig canonical values (swimhub-timer)", () => {
     // apps/mobile/tsconfig.json に直接指定を追加済み (PM_RULINGS.md 論点10対応済み)。
     expect(co.forceConsistentCasingInFileNames).toBe(true);
     expect(co.isolatedModules).toBe(true);
-  });
+  }, TSC_TIMEOUT_MS);
 
   it("apps/shared (自身): target ES2022 + canonical strictness + lib は ES2022 のみ (library系)", () => {
     const co = showConfig("./tsconfig.json");
@@ -101,7 +113,7 @@ describe("Sprint #14 tsconfig canonical values (swimhub-timer)", () => {
     expect(co.declaration).toBe(true);
     expect(co.declarationMap).toBe(true);
     expect(co.sourceMap).toBe(true);
-  });
+  }, TSC_TIMEOUT_MS);
 
   it("packages/i18n: target ES2022 + module ESNext (es6 の設定漏れを修正) + canonical strictness + lib(es2022)", () => {
     const co = showConfig("../../packages/i18n/tsconfig.json");
@@ -112,5 +124,5 @@ describe("Sprint #14 tsconfig canonical values (swimhub-timer)", () => {
     expect(co.declaration).toBe(true);
     expect(co.declarationMap).toBe(true);
     expect(co.sourceMap).toBe(true);
-  });
+  }, TSC_TIMEOUT_MS);
 });
