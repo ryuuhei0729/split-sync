@@ -36,8 +36,10 @@ interface ParsedFont {
 /** Parse the renderer's CSS font shorthand: `[weight] <size>px <family>`. */
 function parseFont(font: string): ParsedFont {
   const match = font.match(/(\d+(?:\.\d+)?)px\s+(.+)$/);
-  if (!match) return { family: "sans-serif", size: 16 };
-  return { size: parseFloat(match[1]), family: match[2].trim() };
+  const sizeStr = match?.[1];
+  const family = match?.[2];
+  if (!sizeStr || !family) return { family: "sans-serif", size: 16 };
+  return { size: parseFloat(sizeStr), family: family.trim() };
 }
 
 export class SkiaOverlayContext implements OverlayContext {
@@ -79,7 +81,9 @@ export class SkiaOverlayContext implements OverlayContext {
     // SkColor is a Float32Array of [r, g, b, a] components in 0..1.
     const color = Skia.Color(this.fillStyle); // parses #rgb, rgba(), names
     paint.setColor(color);
-    const baseAlpha = color[3];
+    // SkColor is always a 4-component [r,g,b,a] Float32Array by the
+    // @shopify/react-native-skia API contract, so index 3 always exists.
+    const baseAlpha = color[3]!;
     paint.setAlphaf(baseAlpha * this.globalAlpha);
     return paint;
   }

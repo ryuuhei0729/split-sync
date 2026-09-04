@@ -114,6 +114,8 @@ export function compositeFrame(context: FrameCompositorContext, input: FrameComp
       let activeSplit = null;
       for (let i = input.splitTimes.length - 1; i >= 0; i--) {
         const split = input.splitTimes[i];
+        if (!split) continue; // i stays within [0, input.splitTimes.length) by the loop bound,
+                               // so split is always defined; guard is defensive against future drift
         if (elapsed >= split.time && elapsed < split.time + SPLIT_DISPLAY_DURATION_SECONDS) {
           activeSplit = split;
           break;

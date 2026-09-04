@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 // 正規表現ベースの逐次パースでは「マッチしない (0件)」と「壊れている/切断された」を
 // 構造的に区別できず、サイレント成功の欠陥が複数回見つかった (getR2Config の設定不備、
@@ -22,8 +22,6 @@ const IMAGE_STORAGE_PREFIXES = ["profile-images", "practice-images", "competitio
 // R2 動画バケット側のプレフィックス。Supabase Storage には動画用バケットが存在しない
 // (R2 無効時は動画アップロード自体が 503 になる) ため、フォールバック対象外。
 const VIDEO_STORAGE_PREFIXES = ["videos", "thumbnails"] as const;
-
-type SupabaseClient = ReturnType<typeof createClient>;
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -166,6 +164,7 @@ async function listAllR2Keys(
 ): Promise<string[]> {
   const allKeys: string[] = [];
   let continuationToken: string | null = null;
+  const seenContinuationTokens = new Set<string>();
 
   do {
     const url = new URL(`${endpoint}/${bucket}`);
@@ -189,6 +188,17 @@ async function listAllR2Keys(
     const { keys, isTruncated, nextContinuationToken } = parseListObjectsV2Xml(xml);
     allKeys.push(...keys);
     continuationToken = isTruncated ? nextContinuationToken : null;
+
+    // R2/中間層が同じ continuation token を繰り返し返すと do...while が終了せず
+    // Edge Function が応答不能になる。既出トークンを検出したら fail-closed で中断する。
+    if (continuationToken) {
+      if (seenContinuationTokens.has(continuationToken)) {
+        throw new Error(
+          `R2 ListObjectsV2 returned a repeated continuation token for bucket ${bucket} (prefix=${prefix})`,
+        );
+      }
+      seenContinuationTokens.add(continuationToken);
+    }
   } while (continuationToken);
 
   return allKeys;

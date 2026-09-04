@@ -138,7 +138,9 @@ describe("generateOverlayPngSequence — onFrame 契約とタイムスタンプ 
   it("[V-10] onFrame に渡されるバイト列は PNG Blob から取り出した Uint8Array である", async () => {
     const onFrame = vi.fn();
     await generateOverlayPngSequence(baseOptions({ durationSeconds: 0.04, fps: 30, onFrame }));
-    const png = onFrame.mock.calls[0][1];
+    // toHaveBeenCalledTimes-style intent: onFrame must have been called for this to be meaningful;
+    // an unmet call would throw on the next line instead of silently passing.
+    const png = onFrame.mock.calls[0]![1];
     expect(png).toBeInstanceOf(Uint8Array);
     expect(Array.from(png as Uint8Array)).toEqual([1, 2, 3]);
   });
@@ -163,7 +165,7 @@ describe("generateOverlayPngSequence — onFrame 契約とタイムスタンプ 
         watermarkIcon,
       }),
     );
-    const input = vi.mocked(compositeOverlayFrame).mock.calls[0][1] as unknown as Record<string, unknown>;
+    const input = vi.mocked(compositeOverlayFrame).mock.calls[0]![1] as unknown as Record<string, unknown>;
     expect(input.splitTimes).toBe(splitTimes);
     expect(input.isFinished).toBe(true);
     expect(input.finishTime).toBe(10);

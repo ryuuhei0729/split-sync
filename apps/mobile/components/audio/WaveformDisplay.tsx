@@ -50,6 +50,8 @@ export function WaveformDisplay({
       <View style={styles.barsContainer}>
         {Array.from({ length: barCount }, (_, i) => {
           const amplitude = waveformData[i];
+          if (amplitude === undefined) return null; // barCount === waveformData.length, so i is
+                                                       // always in-bounds; guard is defensive only
           const barHeight = Math.max(2, amplitude * BAR_HEIGHT * 0.9);
           const opacity = 0.15 + amplitude * 0.6;
 

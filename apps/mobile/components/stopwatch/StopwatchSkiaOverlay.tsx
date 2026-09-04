@@ -117,6 +117,8 @@ export function StopwatchSkiaOverlay({ videoWidth, videoHeight }: Props) {
     const sorted = [...splitTimes].sort((a, b) => a.time - b.time);
     for (let i = sorted.length - 1; i >= 0; i--) {
       const s = sorted[i];
+      if (!s) continue; // i stays within [0, sorted.length) by the loop bound,
+                         // so s is always defined; guard is defensive against future drift
       if (isFinished && finishTime !== null && raceDistance !== null) {
         if (s.distance === raceDistance && s.time === finishTime) continue;
       }

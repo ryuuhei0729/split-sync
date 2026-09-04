@@ -87,7 +87,8 @@ export function localizeAuthError(message: string, t: TFunction): string {
       // passwordTooShort の場合、minLength パラメータを抽出して渡す
       if (i18nKey === "auth.errors.passwordTooShort") {
         const match = message.match(/(\d+)/);
-        const minLength = match ? parseInt(match[1], 10) : 6;
+        const digits = match?.[1];
+        const minLength = digits ? parseInt(digits, 10) : 6;
         return t(i18nKey, { minLength });
       }
       return t(i18nKey);

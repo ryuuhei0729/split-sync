@@ -63,7 +63,10 @@ export default function SkiaSmokeScreen() {
       (canvas) => {
         const ctx = new SkiaOverlayContext(canvas, typefaces);
         drawStopwatch(ctx, { width: W, height: H }, DEFAULT_STOPWATCH_CONFIG, 30.42);
-        drawPassedSplit(ctx, { width: W, height: H }, DEFAULT_STOPWATCH_CONFIG, 30.42, SAMPLE_SPLITS[1]);
+        const passedSplit = SAMPLE_SPLITS[1];
+        if (passedSplit) {
+          drawPassedSplit(ctx, { width: W, height: H }, DEFAULT_STOPWATCH_CONFIG, 30.42, passedSplit);
+        }
       },
       Skia.XYWHRect(0, 0, W, H),
     );

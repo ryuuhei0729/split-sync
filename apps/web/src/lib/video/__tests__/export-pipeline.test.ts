@@ -29,6 +29,11 @@
  * トートロジー回避: 「ffmpeg exec の引数に overlay が含まれる」ことだけでなく、
  * 具体的な数値 (summaryEnableT・スケール後の fontSize 等) を仕様の計算式から
  * 独立に算出し、実装の中間変数コピーにならないようにする。
+ *
+ * 型注記: 各テストは対象関数を await 済みなので、その関数が呼ぶはずの
+ * generateOverlayPngSequence / fakeFFmpeg.exec は既に呼ばれている前提で
+ * `.mock.calls[0]!` を使う。呼ばれていなければ直後の `[0]` アクセスがそのまま
+ * ランタイムエラーになり、テストは (アサーション失敗として) 検出できる。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DEFAULT_STOPWATCH_CONFIG, SUMMARY_DELAY_SECONDS } from "@swimhub-timer/shared";
@@ -152,7 +157,7 @@ describe("exportVideoWithStopwatch — PNG連番生成への入力 (V-09)", () =
 
     await exportVideoWithStopwatch(makeOptions({ originalVideoWidth: 1280, originalVideoHeight: 720, exportSettings: { resolution: "original" } }));
 
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     expect(call.width).toBe(1280);
     expect(call.height).toBe(720);
     expect(call.fps).toBe(25);
@@ -164,7 +169,7 @@ describe("exportVideoWithStopwatch — PNG連番生成への入力 (V-09)", () =
 
     await exportVideoWithStopwatch(makeOptions({ originalVideoWidth: 0, originalVideoHeight: 0 }));
 
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     expect(call.width).toBe(1920);
     expect(call.height).toBe(1080);
   });
@@ -174,7 +179,7 @@ describe("exportVideoWithStopwatch — PNG連番生成への入力 (V-09)", () =
       makeOptions({ originalVideoWidth: 1920, originalVideoHeight: 1080, exportSettings: { resolution: "720" } }),
     );
 
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     // 1920x1080 (16:9) を高さ720にスケール → 幅は 720*16/9=1280 (偶数)
     expect(call.height).toBe(720);
     expect(call.width).toBe(1280);
@@ -187,7 +192,7 @@ describe("exportVideoWithStopwatch — 解像度スケーリングの比例維�
       makeOptions({ originalVideoHeight: 1080, exportSettings: { resolution: "720" }, stopwatchConfig: DEFAULT_STOPWATCH_CONFIG }),
     );
 
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     // 独立算出: resScale = 720/1080 = 0.6666...
     // DEFAULT_STOPWATCH_CONFIG = classic-digital (fontSize:130, padding:12, borderRadius:4)
     expect(call.stopwatchConfig.fontSize).toBe(87); // Math.round(130*2/3)=87
@@ -198,7 +203,7 @@ describe("exportVideoWithStopwatch — 解像度スケーリングの比例維�
   it("[V-12] resolution=original のときスケーリングされない (fontSize/padding/borderRadius が入力と同一)", async () => {
     await exportVideoWithStopwatch(makeOptions({ exportSettings: { resolution: "original" } }));
 
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     expect(call.stopwatchConfig.fontSize).toBe(DEFAULT_STOPWATCH_CONFIG.fontSize);
     expect(call.stopwatchConfig.padding).toBe(DEFAULT_STOPWATCH_CONFIG.padding);
     expect(call.stopwatchConfig.borderRadius).toBe(DEFAULT_STOPWATCH_CONFIG.borderRadius);
@@ -208,7 +213,7 @@ describe("exportVideoWithStopwatch — 解像度スケーリングの比例維�
     const config = { ...DEFAULT_STOPWATCH_CONFIG, fontFamily: "sans-serif" as const, backgroundColor: "rgba(200,30,30,0.85)", textColor: "#FFFFFF" };
     await exportVideoWithStopwatch(makeOptions({ stopwatchConfig: config, exportSettings: { resolution: "720" } }));
 
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     expect(call.stopwatchConfig.fontFamily).toBe("sans-serif");
     expect(call.stopwatchConfig.backgroundColor).toBe("rgba(200,30,30,0.85)");
     expect(call.stopwatchConfig.textColor).toBe("#FFFFFF");
@@ -219,14 +224,14 @@ describe("exportVideoWithStopwatch — 動的要素の受け渡し (V-06/V-07)",
   it("[V-06] splitTimes がそのまま PNG連番生成に渡る", async () => {
     const splitTimes = [{ distance: 50, time: 25, lapTime: 25, memo: "test" }];
     await exportVideoWithStopwatch(makeOptions({ splitTimes }));
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     expect(call.splitTimes).toBe(splitTimes);
   });
 
   it("[V-07] showWatermark=false のとき loadWatermarkIcon が呼ばれず watermarkIcon=null が渡る", async () => {
     await exportVideoWithStopwatch(makeOptions({ showWatermark: false }));
     expect(loadWatermarkIcon).not.toHaveBeenCalled();
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     expect(call.watermarkIcon).toBeNull();
     expect(call.showWatermark).toBe(false);
   });
@@ -236,7 +241,7 @@ describe("exportVideoWithStopwatch — 動的要素の受け渡し (V-06/V-07)",
     vi.mocked(loadWatermarkIcon).mockResolvedValue(icon as never);
     await exportVideoWithStopwatch(makeOptions({ showWatermark: true }));
     expect(loadWatermarkIcon).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0][0];
+    const call = vi.mocked(generateOverlayPngSequence).mock.calls[0]![0];
     expect(call.watermarkIcon).toBe(icon);
     expect(call.showWatermark).toBe(true);
   });
@@ -261,7 +266,7 @@ describe("exportVideoWithStopwatch — フィニッシュサマリー (V-08)", (
     await exportVideoWithStopwatch(makeOptions({ summaryImageData, finishTime: 45, isFinished: true, startSignalTime: 5 }));
 
     expect(fakeFFmpeg.writeFile).toHaveBeenCalledWith("summary.png", expect.any(Uint8Array));
-    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0][0] as string[];
+    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0]![0] as string[];
     const filterComplexIndex = execArgs.indexOf("-filter_complex");
     const filterComplex = execArgs[filterComplexIndex + 1];
 
@@ -276,7 +281,7 @@ describe("exportVideoWithStopwatch — フィニッシュサマリー (V-08)", (
     await exportVideoWithStopwatch(makeOptions({ summaryImageData: null, finishTime: null, isFinished: false }));
 
     expect(fakeFFmpeg.writeFile).not.toHaveBeenCalledWith("summary.png", expect.anything());
-    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0][0] as string[];
+    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0]![0] as string[];
     const filterComplexIndex = execArgs.indexOf("-filter_complex");
     const filterComplex = execArgs[filterComplexIndex + 1];
     expect(filterComplex).not.toContain("[sum]");
@@ -295,7 +300,7 @@ describe("exportVideoWithStopwatch — フィニッシュサマリー (V-08)", (
 describe("exportVideoWithStopwatch — drawtext 完全撤去 & overlay 合成経由 (V-10/V-11)", () => {
   it("[V-11] ffmpeg.exec の引数に drawtext フィルタ文字列が一切含まれない", async () => {
     await exportVideoWithStopwatch(makeOptions({ splitTimes: [{ distance: 50, time: 1, lapTime: 1, memo: "x" }], showWatermark: true }));
-    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0][0] as string[];
+    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0]![0] as string[];
     for (const arg of execArgs) {
       expect(arg).not.toContain("drawtext");
     }
@@ -304,7 +309,7 @@ describe("exportVideoWithStopwatch — drawtext 完全撤去 & overlay 合成経
   it("[V-10] 第2入力として overlay_%05d.png の連番PNGが -framerate <fps> 付きで渡される", async () => {
     vi.mocked(probeVideoSource).mockResolvedValue(makeProbeResult({ fps: 29.97 }) as never);
     await exportVideoWithStopwatch(makeOptions());
-    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0][0] as string[];
+    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0]![0] as string[];
     // inputArgs = ["-i","input.mp4","-framerate",fps.toFixed(3),"-i","overlay_%05d.png"]
     const overlayInputIndex = execArgs.indexOf("overlay_%05d.png");
     expect(overlayInputIndex).toBeGreaterThan(0);
@@ -315,7 +320,7 @@ describe("exportVideoWithStopwatch — drawtext 完全撤去 & overlay 合成経
 
   it("[V-10] メインの合成は overlay フィルタ ([bg][ovl]overlay=0:0) 経由であり、colorkey/chromakey は使わない", async () => {
     await exportVideoWithStopwatch(makeOptions());
-    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0][0] as string[];
+    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0]![0] as string[];
     const filterComplex = execArgs[execArgs.indexOf("-filter_complex") + 1];
     expect(filterComplex).toContain("[bg][ovl]overlay=0:0");
     expect(filterComplex).not.toContain("colorkey");
@@ -326,7 +331,7 @@ describe("exportVideoWithStopwatch — drawtext 完全撤去 & overlay 合成経
 describe("exportVideoWithStopwatch — 音声保持 (V-14)", () => {
   it("[V-14] -c:a aac で再エンコードされ、-map 0:a? で元の音声トラックを維持する", async () => {
     await exportVideoWithStopwatch(makeOptions());
-    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0][0] as string[];
+    const execArgs = vi.mocked(fakeFFmpeg.exec).mock.calls[0]![0] as string[];
     expect(execArgs).toEqual(expect.arrayContaining(["-c:a", "aac", "-map", "0:a?"]));
   });
 });

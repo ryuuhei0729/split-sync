@@ -69,9 +69,18 @@ export function useVideoExport(showWatermark = true) {
     // Clamp to the highest resolution the plan actually allows right before dispatching so
     // a stale/default selection can never bypass the plan gate.
     const allowedResolutions = getAvailableResolutions(plan);
+    const lastAllowedResolution = allowedResolutions[allowedResolutions.length - 1];
     const clampedResolution = allowedResolutions.includes(exportSettings.resolution)
       ? exportSettings.resolution
-      : allowedResolutions[allowedResolutions.length - 1];
+      : lastAllowedResolution;
+    if (!clampedResolution) {
+      // getAvailableResolutions() always returns a non-empty array for every plan today,
+      // so this is structurally unreachable; guard defensively rather than let an empty
+      // allow-list silently fall through to the unclamped (possibly paywalled) resolution.
+      setError("エクスポート設定の取得に失敗しました");
+      setIsExporting(false);
+      return;
+    }
     const clampedExportSettings = { ...exportSettings, resolution: clampedResolution };
 
     try {

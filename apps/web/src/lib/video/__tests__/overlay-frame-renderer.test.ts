@@ -31,6 +31,10 @@
  * elapsed/config/split で shared 関数を呼ぶか」という分岐ロジックのみを見る。
  * elapsed の期待値は実装のコピーではなく、仕様 (rawElapsed=timestamp-startSignalTime,
  * isFinished時はfinishTimeでクランプ) から独立に計算する。
+ *
+ * 型注記: 各テストは compositeOverlayFrame を呼んだ直後に drawStopwatch/drawPassedSplit
+ * の呼び出し引数を読むので `.mock.calls[0]!` を使う。呼ばれていなければ直後の `[N]`
+ * アクセスがそのままランタイムエラーになり、テストは検出できる。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -96,13 +100,13 @@ describe("compositeOverlayFrame — elapsed の計算 (V-02)", () => {
   it("[V-02] timestamp=5.32, startSignalTime=5 → elapsed=0.32 (rawElapsed=timestamp-startSignalTime) で drawStopwatch を呼ぶ", () => {
     compositeOverlayFrame(makeContext(), { ...baseInput, timestamp: 5.32 });
     expect(drawStopwatch).toHaveBeenCalledTimes(1);
-    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0][3];
+    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0]![3];
     expect(elapsedArg).toBeCloseTo(0.32, 10);
   });
 
   it("[V-02] timestamp < startSignalTime (スタート前) では elapsed が 0 にクランプされ、例外を投げない", () => {
     expect(() => compositeOverlayFrame(makeContext(), { ...baseInput, timestamp: 2 })).not.toThrow();
-    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0][3];
+    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0]![3];
     expect(elapsedArg).toBe(0);
   });
 
@@ -111,13 +115,13 @@ describe("compositeOverlayFrame — elapsed の計算 (V-02)", () => {
     // (summary 表示開始は startSignalTime+finishTime+SUMMARY_DELAY_SECONDS=52 なので、
     //  それより前の timestamp=51 を選び、サマリー抑制 (V-08) と混同しないようにする)
     compositeOverlayFrame(makeContext(), { ...baseInput, isFinished: true, finishTime: 45, timestamp: 51 });
-    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0][3];
+    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0]![3];
     expect(elapsedArg).toBe(45);
   });
 
   it("[V-02] isFinished=true でも elapsed <= finishTime のときはクランプされない (実測値のまま)", () => {
     compositeOverlayFrame(makeContext(), { ...baseInput, isFinished: true, finishTime: 45, timestamp: 30 });
-    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0][3];
+    const elapsedArg = vi.mocked(drawStopwatch).mock.calls[0]![3];
     expect(elapsedArg).toBeCloseTo(25, 10);
   });
 });
@@ -158,7 +162,7 @@ describe("compositeOverlayFrame — スプリットバッジの区間判定 (V-0
   it("[V-06] memo 付きスプリットの memo がそのまま drawPassedSplit の引数に渡る", () => {
     const splitWithMemo: SplitTime = { ...split, memo: "ドルフィン5回" };
     compositeOverlayFrame(makeContext(), { ...baseInput, splitTimes: [splitWithMemo], timestamp: 31 });
-    const passed = vi.mocked(drawPassedSplit).mock.calls[0][4] as SplitTime;
+    const passed = vi.mocked(drawPassedSplit).mock.calls[0]![4] as SplitTime;
     expect(passed.memo).toBe("ドルフィン5回");
   });
 
@@ -176,7 +180,7 @@ describe("compositeOverlayFrame — スプリットバッジの区間判定 (V-0
     // 末尾 (直近) の "second" が優先される。
     compositeOverlayFrame(makeContext(), { ...baseInput, splitTimes: splits, timestamp: 31 });
     expect(drawPassedSplit).toHaveBeenCalledTimes(1);
-    const passed = vi.mocked(drawPassedSplit).mock.calls[0][4] as SplitTime;
+    const passed = vi.mocked(drawPassedSplit).mock.calls[0]![4] as SplitTime;
     expect(passed.memo).toBe("second");
   });
 });
