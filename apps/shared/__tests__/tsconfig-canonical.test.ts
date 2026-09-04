@@ -1,3 +1,12 @@
+/**
+ * [3リポ同期の不変条件]
+ * このファイルは以下の2ファイルと同じ canonical 値をリテラルで重複定義している。
+ * 3リポは独立した git リポジトリのため、単一の CI で跨リポの一致を検証することは
+ * 原理的に不可能。canonical 値を変更するときは、この3ファイルすべてを手動で更新すること。
+ *   - swim-hub/apps/shared/__tests__/tsconfig-canonical.test.ts
+ *   - swimhub-scanner/apps/shared/__tests__/tsconfig-canonical.test.ts
+ */
+
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -79,8 +88,10 @@ describe("Sprint #14 tsconfig canonical values (swimhub-timer)", () => {
     // lib の正確な集合は assert しない。DOM を失っていないことだけを弱く確認する
     // (swim-hub/apps/shared と同種の landmine を、確定していない範囲で最小限に防ぐ)。
     expect(normalizeLib(co.lib)).toContain("dom");
-    // 残債務 (PM_RULINGS.md 論点10、今スプリントでは対応しない): forceConsistentCasingInFileNames /
-    // isolatedModules はここでは意図的に assert しない。
+    // forceConsistentCasingInFileNames / isolatedModules は
+    // apps/mobile/tsconfig.json に直接指定を追加済み (PM_RULINGS.md 論点10対応済み)。
+    expect(co.forceConsistentCasingInFileNames).toBe(true);
+    expect(co.isolatedModules).toBe(true);
   });
 
   it("apps/shared (自身): target ES2022 + canonical strictness + lib は ES2022 のみ (library系)", () => {
